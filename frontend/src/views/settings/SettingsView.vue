@@ -41,7 +41,7 @@
         <!-- 大模型 -->
         <el-tab-pane label="大模型" name="llm">
           <el-alert type="info" :closable="false" style="margin-bottom:12px"
-                    title="只需填入「订阅 Key」即可使用；Base URL 与模型已按供应商预填，通常无需修改。可启用多家构成降级链：默认供应商优先，其余按优先级数字升序兜底。" />
+                    title="只需填入「订阅 Key」即可使用（支持普通 API Key 与 Token Plan 套餐订阅 Key）；Base URL 与模型已按供应商预填，通常无需修改。可启用多家构成降级链：默认供应商优先，其余按优先级数字升序兜底。" />
           <el-row :gutter="14">
             <el-col v-for="p in llmProviders" :key="p.key" :xs="24" :md="12">
               <el-card class="provider-card" shadow="hover">
@@ -55,8 +55,8 @@
                   <el-form-item label="名称"><el-input v-model="forms.llm[p.key].name" /></el-form-item>
                   <el-form-item label="订阅 Key">
                     <el-input v-model="forms.llm[p.key].api_key" type="password" show-password
-                              placeholder="粘贴供应商后台的订阅 Key（即 API Key）；不修改请保持掩码" />
-                    <div class="form-tip">在 {{ p.label }} 控制台「API Keys / 订阅密钥」中创建，以 sk- 开头</div>
+                              placeholder="粘贴 API Key 或 Token Plan 订阅 Key；不修改请保持掩码" />
+                    <div class="form-tip">支持普通 API Key 与 Token Plan 套餐订阅 Key，在 {{ p.label }} 控制台创建，以 sk- 开头</div>
                   </el-form-item>
                   <el-form-item label="Base URL">
                     <el-input v-model="forms.llm[p.key].base_url" />
