@@ -88,7 +88,7 @@ async def test_minimax_no_response_format(monkeypatch):
     client = LLMClient("minimax", {"api_key": "mm", "model": "MiniMax-M1"})
     await client.chat([{"role": "user", "content": "hi"}], json_mode=True)
     assert "response_format" not in _FakeHTTP.captured["json"]
-    assert "minimax.io" in _FakeHTTP.captured["url"]
+    assert "minimax.cn" in _FakeHTTP.captured["url"]
 
 
 # ---------- 降级链 ----------

@@ -4,11 +4,12 @@
 - DeepSeek:   https://api.deepseek.com
 - 豆包(方舟): https://ark.cn-beijing.volces.com/api/v3
 - 通义千问:   https://dashscope.aliyuncs.com/compatible-mode/v1
-- MiniMax:    https://api.minimax.io/v1
+- MiniMax:    https://api.minimax.cn/v1
 """
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -18,6 +19,11 @@ from app.core.config import settings
 from app.core.exceptions import IntegrationError
 
 logger = logging.getLogger(__name__)
+
+# 推理模型（如 MiniMax-M1/M3）会在正文中输出 <think>...</think> 推理过程，需剥离
+_THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
+# 处理被 max_tokens 截断、未闭合的 <think>
+_UNCLOSED_THINK_RE = re.compile(r"<think>.*$", re.DOTALL | re.IGNORECASE)
 
 PROVIDER_META: dict[str, dict[str, str]] = {
     "deepseek": {
@@ -40,7 +46,7 @@ PROVIDER_META: dict[str, dict[str, str]] = {
     },
     "minimax": {
         "label": "MiniMax",
-        "default_base_url": "https://api.minimax.io/v1",
+        "default_base_url": "https://api.minimax.cn/v1",
         "default_model": "MiniMax-M1",
         "json_mode": "prompt",
     },
@@ -114,6 +120,9 @@ class LLMClient:
             ) from exc
         if not content:
             raise IntegrationError(self.provider, "模型返回为空")
+        # 剥离推理模型的 <think> 标签内容，避免干扰 JSON 解析与报告展示
+        content = _THINK_RE.sub("", content)
+        content = _UNCLOSED_THINK_RE.sub("", content).strip()
         logger.info("LLM 调用成功 provider=%s model=%s chars=%d",
                     self.provider, self.model, len(content))
         return content
