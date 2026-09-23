@@ -102,7 +102,12 @@ class LLMClient:
             async with httpx.AsyncClient(timeout=self.timeout) as http:
                 resp = await http.post(self._endpoint(), json=body, headers=headers)
         except httpx.HTTPError as exc:
-            raise IntegrationError(self.provider, f"请求失败: {exc}") from exc
+            logger.warning("LLM HTTP 异常 provider=%s type=%s: %r",
+                           self.provider, type(exc).__name__, exc)
+            raise IntegrationError(
+                self.provider,
+                f"请求失败({type(exc).__name__}): {exc!r}",
+            ) from exc
 
         if resp.status_code != 200:
             raise IntegrationError(

@@ -123,7 +123,7 @@ async def _run_with_session(db: AsyncSession, alert_id: int,
         }
         messages = build_analysis_messages(alert_view, metric_ctx, log_ctx)
 
-        llm_resp = await chain.chat(messages, json_mode=True, max_tokens=4096)
+        llm_resp = await chain.chat(messages, json_mode=True, max_tokens=8192)
         raw_content = llm_resp.content
         try:
             result = parse_structured_json(raw_content)
@@ -132,7 +132,7 @@ async def _run_with_session(db: AsyncSession, alert_id: int,
             logger.warning("结构化解析失败，发起修复重试: %s", parse_err)
             llm_resp = await chain.chat(
                 repair_messages(str(parse_err), raw_content),
-                json_mode=True, max_tokens=4096,
+                json_mode=True, max_tokens=8192,
             )
             result = parse_structured_json(llm_resp.content)
 

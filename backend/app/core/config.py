@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     enable_docs: bool = True
 
     # 外部调用
-    http_timeout: float = 15.0
+    http_timeout: float = 120.0
 
     # 分析默认参数
     analysis_auto_enabled: bool = True
