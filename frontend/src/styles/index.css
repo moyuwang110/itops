@@ -1,0 +1,114 @@
+:root {
+  --itops-sidebar-w: 230px;
+  --itops-sidebar-collapsed: 64px;
+  --itops-header-h: 56px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  background: var(--el-bg-color-page);
+  color: var(--el-text-color-primary);
+}
+
+.page-container {
+  padding: 16px;
+}
+
+.page-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 14px;
+}
+
+.card-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.toolbar .flex-grow {
+  flex: 1 1 auto;
+}
+
+.text-muted {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* 滚动条 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--el-border-color-darker);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 工作台区块 */
+.workbench {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.workbench .panel-title {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.evidence-line {
+  cursor: pointer;
+  transition: background 0.2s;
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+.evidence-line:hover {
+  background: var(--el-color-primary-light-9);
+}
+.log-row-flash {
+  animation: flash 1.6s ease;
+}
+@keyframes flash {
+  0% { background: var(--el-color-warning-light-7); }
+  100% { background: transparent; }
+}
+
+/* 窄屏优化 */
+@media (max-width: 768px) {
+  .page-container {
+    padding: 10px;
+  }
+  .el-table {
+    font-size: 12px;
+  }
+}

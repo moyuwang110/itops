@@ -1,0 +1,47 @@
+# ========== 运行时与密钥（绝不可入库） ==========
+.env
+.env.*
+!.env.example
+backend/data/
+*.db
+*.sqlite
+*.sqlite3
+
+# ========== Python ==========
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+coverage.xml
+.coverage
+htmlcov/
+
+# ========== Node / 前端 ==========
+node_modules/
+frontend/dist/
+frontend/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ========== Docker / 构建产物 ==========
+docker-data/
+*.log
+
+# ========== IDE / OS ==========
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ========== 内部规格（可选，按需保留） ==========
+# .trae/

@@ -1,0 +1,41 @@
+"""枚举常量（以字符串存储，兼容 SQLite/PG）。"""
+from __future__ import annotations
+
+# 集成类型
+CFG_ZABBIX = "zabbix"
+CFG_LLM = "llm"
+CFG_LOG_PLATFORM = "log_platform"
+CFG_NOTIFY_CHANNEL = "notify_channel"
+
+CONFIG_TYPES = {CFG_ZABBIX, CFG_LLM, CFG_LOG_PLATFORM, CFG_NOTIFY_CHANNEL}
+
+# 大模型供应商
+LLM_DEEPSEEK = "deepseek"
+LLM_DOUBAO = "doubao"
+LLM_QWEN = "qwen"
+LLM_MINIMAX = "minimax"
+LLM_PROVIDERS = {LLM_DEEPSEEK, LLM_DOUBAO, LLM_QWEN, LLM_MINIMAX}
+
+# 日志平台
+LOG_GRAYLOG = "graylog"
+LOG_LOKI = "loki"
+LOG_ELASTICSEARCH = "elasticsearch"
+LOG_PROVIDERS = {LOG_GRAYLOG, LOG_LOKI, LOG_ELASTICSEARCH}
+
+# 通知渠道
+NOTIFY_FEISHU = "feishu"
+NOTIFY_WECOM = "wecom"
+NOTIFY_PROVIDERS = {NOTIFY_FEISHU, NOTIFY_WECOM}
+
+# 告警状态
+ALERT_PROBLEM = "problem"
+ALERT_RESOLVED = "resolved"
+
+# 分析状态
+ANALYSIS_PENDING = "pending"
+ANALYSIS_PROCESSING = "processing"
+ANALYSIS_SUCCESS = "success"
+ANALYSIS_FAILED = "failed"
+ANALYSIS_STATUSES = {
+    ANALYSIS_PENDING, ANALYSIS_PROCESSING, ANALYSIS_SUCCESS, ANALYSIS_FAILED
+}

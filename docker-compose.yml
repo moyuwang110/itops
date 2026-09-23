@@ -1,0 +1,48 @@
+name: itops
+
+services:
+  backend:
+    build: ./backend
+    image: itops-backend:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - itops-data:/app/data
+    expose:
+      - "8000"
+    # 启用 PostgreSQL profile 时依赖数据库健康
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false
+
+  frontend:
+    build: ./frontend
+    image: itops-frontend:latest
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      - backend
+
+  # 可选：docker compose --profile postgres up -d
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["postgres"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-itops}
+      POSTGRES_USER: ${POSTGRES_USER:-itops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-itops_pass_change_me}
+    volumes:
+      - itops-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-itops} -d ${POSTGRES_DB:-itops}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  itops-data:
+  itops-pgdata:
