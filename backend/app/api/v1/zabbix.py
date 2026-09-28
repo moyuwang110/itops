@@ -79,6 +79,8 @@ async def trend(
 @router.get("/problems", summary="Zabbix 当前未恢复问题")
 async def problems(
     limit: int = Query(default=50, ge=1, le=500),
+    host: str | None = Query(default=None, description="主机名关键字"),
+    severities: list[int] | None = Query(default=None, description="告警级别 0-5"),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict]:
-    return await zabbix_service.query_problems(db, limit)
+    return await zabbix_service.query_problems(db, limit, host=host, severities=severities)

@@ -68,30 +68,6 @@
         </el-card>
       </el-col>
     </el-row>
-
-    <el-card shadow="never" style="margin-top:14px">
-      <template #header>
-        <div class="card-head">
-          <span>Zabbix 当前未恢复问题</span>
-          <el-button link type="primary" @click="loadProblems">刷新</el-button>
-        </div>
-      </template>
-      <el-table :data="problems" v-loading="problemLoading" size="small">
-        <el-table-column label="主机" min-width="120" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.hosts?.[0]?.host || '-' }}</template>
-        </el-table-column>
-        <el-table-column prop="name" label="问题" min-width="240" show-overflow-tooltip />
-        <el-table-column label="级别" width="90">
-          <template #default="{ row }">
-            <el-tag :type="severityTag(sevLabel(row.severity))" size="small">{{ sevLabel(row.severity) }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="发生时间" width="170">
-          <template #default="{ row }">{{ fmtTime((row.clock || 0) * 1000) }}</template>
-        </el-table-column>
-        <template #empty><el-empty description="当前没有未恢复问题" :image-size="60" /></template>
-      </el-table>
-    </el-card>
   </div>
 </template>
 
@@ -100,13 +76,8 @@ import { computed, onMounted, ref } from 'vue'
 import { Search } from '@element-plus/icons-vue'
 import api from '../../utils/api'
 import EChart from '../../components/EChart.vue'
-import { fmtTime, severityTag } from '../../utils/format'
+import { fmtTime } from '../../utils/format'
 import { useThemeStore } from '../../stores/theme'
-
-const SEV_MAP = { 0: '未分类', 1: '信息', 2: '警告', 3: '一般严重', 4: '严重', 5: '灾难' }
-function sevLabel(v) {
-  return SEV_MAP[String(v)] || (v ? String(v) : '未分级')
-}
 
 const theme = useThemeStore()
 const hostKeyword = ref('')
@@ -120,8 +91,6 @@ const selectedItem = ref(null)
 const rangeMin = ref(60)
 const points = ref([])
 const histLoading = ref(false)
-const problems = ref([])
-const problemLoading = ref(false)
 
 const filteredItems = computed(() => {
   const k = itemKeyword.value.trim().toLowerCase()
@@ -208,19 +177,8 @@ const histOption = computed(() => {
   }
 })
 
-async function loadProblems() {
-  problemLoading.value = true
-  try {
-    const { data } = await api.get('/zabbix/problems', { params: { limit: 50 } })
-    problems.value = data
-  } finally {
-    problemLoading.value = false
-  }
-}
-
 onMounted(() => {
   loadHosts()
-  loadProblems()
 })
 </script>
 

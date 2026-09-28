@@ -9,11 +9,15 @@
                      :label="`${p.name}（${p.provider}）`" :value="p.provider" />
         </el-select>
         <el-input v-model="keyword" placeholder="关键词（多词以空格分隔，OR 语义）" clearable
-                  style="width:300px" @keyup.enter="query" />
-        <el-input v-model="host" placeholder="主机名（可选）" clearable style="width:180px" @keyup.enter="query" />
+                  style="width:260px" @keyup.enter="query" />
+        <el-input v-model="host" placeholder="主机名" clearable style="width:140px" @keyup.enter="query" />
+        <el-select v-model="level" placeholder="级别" clearable style="width:110px" @change="query">
+          <el-option v-for="l in LEVELS" :key="l" :label="l" :value="l" />
+        </el-select>
+        <el-input v-model="source" placeholder="来源" clearable style="width:140px" @keyup.enter="query" />
         <el-date-picker v-model="range" type="datetimerange" range-separator="至"
                         start-placeholder="开始" end-placeholder="结束"
-                        :shortcuts="shortcuts" style="width:360px" />
+                        :shortcuts="shortcuts" style="width:340px" />
         <el-button type="primary" :icon="Search" :loading="loading" @click="query">查询</el-button>
       </div>
 
@@ -54,9 +58,13 @@ const platforms = ref([])
 const platform = ref('')
 const keyword = ref('')
 const host = ref('')
+const level = ref('')
+const source = ref('')
 const range = ref(defaultRange())
 const logs = ref([])
 const loading = ref(false)
+
+const LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace']
 
 function defaultRange() {
   const end = new Date()
@@ -93,6 +101,8 @@ async function query() {
         platform: platform.value,
         keyword: keyword.value,
         host: host.value,
+        level: level.value,
+        source: source.value,
         start: range.value?.[0]?.toISOString(),
         end: range.value?.[1]?.toISOString(),
         limit: 500,

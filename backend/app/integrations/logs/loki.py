@@ -84,7 +84,7 @@ class LokiClient(LogPlatformClient):
                     raw={"labels": labels, "line": line},
                 ))
         rows.sort(key=lambda r: r["ts"])
-        return rows
+        return self._filter_rows(rows, q)
 
 
 def guess_level(line: str) -> str:

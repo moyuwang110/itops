@@ -12,6 +12,26 @@ from app.core.exceptions import IntegrationError
 
 logger = logging.getLogger(__name__)
 
+# 共享 httpx 客户端池：按 verify_ssl 分组复用，避免每次 RPC 重新建连/TLS 握手。
+# httpx 不支持 per-request verify，因此按配置分组维护客户端。
+_shared_clients: dict[bool, httpx.AsyncClient] = {}
+
+
+def _get_http_client(verify_ssl: bool) -> httpx.AsyncClient:
+    client = _shared_clients.get(verify_ssl)
+    if client is None or client.is_closed:
+        client = httpx.AsyncClient(verify=verify_ssl)
+        _shared_clients[verify_ssl] = client
+    return client
+
+
+async def close_shared_clients() -> None:
+    """关闭所有共享 httpx 客户端（应用停止时调用）。"""
+    for client in _shared_clients.values():
+        if not client.is_closed:
+            await client.aclose()
+    _shared_clients.clear()
+
 
 class ZabbixClient:
     def __init__(self, conf: dict[str, Any]) -> None:
@@ -41,10 +61,12 @@ class ZabbixClient:
         if auth:
             payload["auth"] = auth
         headers = {"Content-Type": "application/json-rpc"}
+        http = _get_http_client(self.verify_ssl)
         try:
-            async with httpx.AsyncClient(verify=self.verify_ssl,
-                                        timeout=settings.http_timeout) as http:
-                resp = await http.post(self.base_url, json=payload, headers=headers)
+            resp = await http.post(
+                self.base_url, json=payload, headers=headers,
+                timeout=settings.http_timeout,
+            )
         except httpx.HTTPError as exc:
             raise IntegrationError("zabbix", f"请求 Zabbix 失败: {exc}") from exc
 
@@ -203,29 +225,74 @@ class ZabbixClient:
         points.sort(key=lambda p: p["ts"])
         return points
 
-    async def current_problems(self, limit: int = 50) -> list[dict[str, Any]]:
+    async def current_problems(self, limit: int = 50, host: str | None = None,
+                               severities: list[int] | None = None) -> list[dict[str, Any]]:
         params = {
             "output": "extend",
             "recent": True,
             "sortfield": "eventid",
             "sortorder": "DESC",
             "limit": limit,
-            "selectHosts": ["hostid", "host", "name"],
         }
+        # 级别筛选：problem.get 原生支持 severities
+        if severities:
+            params["severities"] = severities
+        # 主机筛选：先按主机名解析 hostid，再传入 hostids
+        if host:
+            host_rows = await self._call("host.get", {
+                "output": ["hostid"],
+                "search": {"host": host, "name": host},
+                "searchByAny": True,
+                "limit": 100,
+            })
+            host_ids = [h["hostid"] for h in (host_rows or [])]
+            if not host_ids:
+                return []
+            params["hostids"] = host_ids
         rows = await self._call("problem.get", params)
-        out = []
+        out: list[dict[str, Any]] = []
+        trigger_ids: set[str] = set()
         for r in rows or []:
-            hosts = r.get("hosts") or []
+            obj_id = r.get("objectid")
+            if obj_id:
+                trigger_ids.add(str(obj_id))
             out.append({
                 "event_id": r.get("eventid") or r.get("objectid"),
                 "name": r.get("name"),
                 "severity": r.get("severity"),
                 "clock": int(r.get("clock", 0)),
                 "acknowledged": str(r.get("acknowledged")) == "1",
-                "hosts": [{"host_id": h.get("hostid"), "host": h.get("host"),
-                           "name": h.get("name")} for h in hosts],
+                # 若 problem.get 已返回 hosts（部分版本支持 selectHosts）直接保留，
+                # 否则通过下方 trigger.get 补全
+                "hosts": r.get("hosts"),
+                "_trigger_id": str(obj_id) if obj_id else None,
             })
-        return out
+
+        # problem.get 不支持 selectHosts 时，用 trigger.get 关联主机
+        need_lookup = any(p["hosts"] is None for p in out)
+        if need_lookup and trigger_ids:
+            triggers = await self._call("trigger.get", {
+                "triggerids": list(trigger_ids),
+                "selectHosts": ["hostid", "host", "name"],
+                "output": ["triggerid"],
+            })
+            host_map: dict[str, list[dict[str, Any]]] = {}
+            for t in triggers or []:
+                host_map[str(t.get("triggerid"))] = t.get("hosts") or []
+            for p in out:
+                if p["hosts"] is None and p["_trigger_id"]:
+                    p["hosts"] = host_map.get(p["_trigger_id"], [])
+
+        result = []
+        for p in out:
+            p.pop("_trigger_id", None)
+            p["hosts"] = [
+                {"host_id": h.get("hostid"), "host": h.get("host"),
+                 "name": h.get("name")}
+                for h in (p.get("hosts") or [])
+            ]
+            result.append(p)
+        return result
 
 
 async def zabbix_tester(conf: dict[str, Any]) -> tuple[bool, str]:

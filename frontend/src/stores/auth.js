@@ -2,23 +2,54 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import api from '../utils/api'
 
-const TOKEN_KEY = 'itops-token'
 const NAME_KEY = 'itops-username'
+const AVATAR_KEY = 'itops-avatar'
 
 export const useAuthStore = defineStore('auth', () => {
-  const token = ref(localStorage.getItem(TOKEN_KEY) || '')
+  // token 由后端 httpOnly Cookie 管理，前端不再持有；仅缓存用户名/头像用于显示
+  const token = ref('')
   const username = ref(localStorage.getItem(NAME_KEY) || '')
+  const avatar = ref(localStorage.getItem(AVATAR_KEY) || '')
 
   function setSession(data) {
-    token.value = data.access_token
-    username.value = data.username
-    localStorage.setItem(TOKEN_KEY, data.access_token)
-    localStorage.setItem(NAME_KEY, data.username)
+    token.value = data.access_token || ''
+    username.value = data.username || ''
+    avatar.value = data.avatar || ''
+    localStorage.setItem(NAME_KEY, username.value)
+    localStorage.setItem(AVATAR_KEY, avatar.value)
   }
 
   async function login(form) {
-    const { data } = await api.post('/auth/login', form)
+    // form 可能是 Vue 响应式对象，浅拷贝避免序列化异常
+    const payload = { username: form.username, password: form.password }
+    const { data } = await api.post('/auth/login', payload)
     setSession(data)
+    return data
+  }
+
+  async function fetchProfile() {
+    const { data } = await api.get('/auth/me')
+    username.value = data.username || ''
+    avatar.value = data.avatar || ''
+    localStorage.setItem(NAME_KEY, username.value)
+    localStorage.setItem(AVATAR_KEY, avatar.value)
+    return data
+  }
+
+  async function updateProfile(payload) {
+    const { data } = await api.put('/auth/profile', payload)
+    username.value = data.username || ''
+    avatar.value = data.avatar || ''
+    localStorage.setItem(NAME_KEY, username.value)
+    localStorage.setItem(AVATAR_KEY, avatar.value)
+    return data
+  }
+
+  async function changePassword(oldPassword, newPassword) {
+    const { data } = await api.put('/auth/password', {
+      old_password: oldPassword,
+      new_password: newPassword,
+    })
     return data
   }
 
@@ -30,9 +61,10 @@ export const useAuthStore = defineStore('auth', () => {
     }
     token.value = ''
     username.value = ''
-    localStorage.removeItem(TOKEN_KEY)
+    avatar.value = ''
     localStorage.removeItem(NAME_KEY)
+    localStorage.removeItem(AVATAR_KEY)
   }
 
-  return { token, username, login, logout, setSession }
+  return { token, username, avatar, login, logout, setSession, fetchProfile, updateProfile, changePassword }
 })

@@ -27,6 +27,13 @@ async def lifespan(app: FastAPI):  # noqa: ANN201
     if settings.require_secure_secrets:
         validate_secure_secrets(settings)
     await init_models()
+    # 播种初始管理员（users 表为空时）
+    try:
+        from app.services import auth_service
+        async with AsyncSessionLocal() as db:
+            await auth_service.seed_admin_user(db)
+    except Exception:  # noqa: BLE001
+        logger.exception("播种初始管理员失败")
     # 清理已过期的登出令牌黑名单
     async with AsyncSessionLocal() as db:
         await db.execute(delete(RevokedToken).where(
@@ -42,6 +49,14 @@ async def lifespan(app: FastAPI):  # noqa: ANN201
         logger.exception("启动回收 processing 告警失败")
     logger.info("ITOPS 后端启动完成", extra={"db": settings.database_url.split(":", 1)[0]})
     yield
+    # 关闭共享 httpx 客户端，释放连接资源
+    try:
+        from app.integrations.llm.client import close_shared_clients as close_llm
+        from app.integrations.zabbix.client import close_shared_clients as close_zabbix
+        await close_llm()
+        await close_zabbix()
+    except Exception:  # noqa: BLE001
+        logger.exception("关闭共享 httpx 客户端失败")
 
 
 def create_app() -> FastAPI:

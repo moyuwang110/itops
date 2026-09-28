@@ -8,7 +8,7 @@ from app.integrations.logs.loki import LokiClient
 from app.integrations.zabbix.client import ZabbixClient
 
 from tests.test_analysis import (
-    GOOD_RESULT, PROBLEM, _analyze_and_poll, _disable_auto,
+    GOOD_RESULT, PROBLEM, _alert_dt, _analyze_and_poll, _disable_auto,
     _llm_config, _loki_config, _zabbix_config,
 )
 
@@ -106,8 +106,9 @@ async def test_report_list_export_and_dashboard(client, auth_headers, monkeypatc
 
     listed = await client.get("/api/v1/reports", headers=auth_headers)
     assert listed.status_code == 200
-    assert listed.json()["total"] == 1
-    assert listed.json()["items"][0]["alert"]["host"] == "web01"
+    reports_body = listed.json()
+    assert reports_body["total"] == 1
+    assert reports_body["items"][0]["alert"]["host"] == "web01"
 
     export = await client.get(f"/api/v1/reports/{report_id}/export",
                               headers=auth_headers)
@@ -130,23 +131,28 @@ async def test_report_list_export_and_dashboard(client, auth_headers, monkeypatc
 
 async def test_report_list_time_filter(client, auth_headers, monkeypatch):
     await _make_report(client, auth_headers, monkeypatch)
-    # PROBLEM 发生于 2026-09-22 10:05 UTC（naive 输入按 UTC 存储）
+    # PROBLEM 发生于 _alert_dt（2 小时前，naive 输入按 UTC 存储）
+    from datetime import timedelta
+    day_start = _alert_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    next_day = day_start + timedelta(days=1)
     in_range = await client.get(
         "/api/v1/reports",
-        params={"start": "2026-09-22T00:00:00", "end": "2026-09-23T00:00:00"},
+        params={"start": day_start.isoformat(), "end": next_day.isoformat()},
         headers=auth_headers,
     )
-    assert in_range.json()["total"] == 1
+    in_range_body = in_range.json()
+    import sys; print("DEBUG in_range keys:", list(in_range_body.keys()), "total:", in_range_body.get("total"), file=sys.stderr)
+    assert in_range_body["total"] == 1
     out_range = await client.get(
-        "/api/v1/reports", params={"start": "2026-09-23T00:00:00"},
+        "/api/v1/reports", params={"start": next_day.isoformat()},
         headers=auth_headers,
     )
     assert out_range.json()["total"] == 0
-    # 带时区偏移的入参同样折算为 UTC
+    # 带时区偏移的入参同样折算为 UTC（+08:00 的同一时刻对应 UTC 更早，不在窗口内）
     tz_param = await client.get(
         "/api/v1/reports",
-        params={"start": "2026-09-22T18:10:00+08:00",
-                "end": "2026-09-22T18:10:00+08:00"},
+        params={"start": (next_day + timedelta(hours=8)).replace(tzinfo=None).isoformat() + "+08:00",
+                "end": (next_day + timedelta(hours=8)).replace(tzinfo=None).isoformat() + "+08:00"},
         headers=auth_headers,
     )
     assert tz_param.json()["total"] == 0

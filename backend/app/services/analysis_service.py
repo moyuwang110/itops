@@ -94,14 +94,16 @@ async def _run_with_session(db: AsyncSession, alert_id: int,
         center_ts = int(to_epoch(alert.occurred_at)) if alert.occurred_at else int(time.time())
 
         # 1) 指标上下文（Zabbix 不可用时降级为空证据）
-        zabbix_client = None
+        metric_ctx: dict[str, Any] = {"available": False, "series": [],
+                                      "host": alert.host, "host_id": "",
+                                      "window": {"start": 0, "end": 0}}
         try:
             zabbix_client = await get_zabbix_client(db, require_enabled=True)
+            metric_ctx = await metric_service.collect_metric_context(
+                zabbix_client, alert.host, center_ts, before, after
+            )
         except Exception as zex:  # noqa: BLE001
             logger.info("Zabbix 不可用，分析将缺少指标证据: %s", zex)
-        metric_ctx = await metric_service.collect_metric_context(
-            zabbix_client, alert.host, center_ts, before, after
-        )
 
         # 2) 日志上下文（跨平台，逐平台容错）
         log_ctx = await log_service.collect_alert_logs(

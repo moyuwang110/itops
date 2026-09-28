@@ -32,7 +32,8 @@ async def enabled_platforms(db: AsyncSession) -> list[dict[str, Any]]:
 
 async def query_logs(db: AsyncSession, platform: str, start_ts: int, end_ts: int,
                      keyword: str, host: str, limit: int,
-                     keywords: list[str] | None = None) -> dict[str, Any]:
+                     keywords: list[str] | None = None,
+                     level: str = "", source: str = "") -> dict[str, Any]:
     rows = await _enabled_platform_rows(db)
     target = next((r for r in rows if r.provider == platform), None)
     if target is None:
@@ -40,7 +41,8 @@ async def query_logs(db: AsyncSession, platform: str, start_ts: int, end_ts: int
 
     client = build_platform_client(target.provider, decrypt_settings(target))
     q = LogQuery(start_ts=start_ts, end_ts=end_ts, keyword=keyword or "",
-                 host=host or "", limit=limit, keywords=keywords)
+                 host=host or "", level=level or "", source=source or "",
+                 limit=limit, keywords=keywords)
     logs = await client.query(q)
     return {
         "platform": platform,

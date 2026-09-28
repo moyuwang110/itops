@@ -115,7 +115,12 @@ const menus = [
       { title: '分析报告', icon: 'Document', path: '/reports' },
     ],
   },
-  { title: '监控数据', icon: 'Monitor', path: '/monitoring' },
+  { title: '监控数据', icon: 'Monitor',
+    children: [
+      { title: '主机与监控项', icon: 'Monitor', path: '/monitoring' },
+      { title: '未恢复问题', icon: 'Warning', path: '/monitoring/problems' },
+    ],
+  },
   { title: '日志查询', icon: 'Tickets', path: '/logs' },
   {
     title: '集成配置', icon: 'Setting',

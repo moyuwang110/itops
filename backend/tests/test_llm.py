@@ -47,16 +47,7 @@ class _Resp:
 class _FakeHTTP:
     captured: dict = {}
 
-    def __init__(self, *a, **k):
-        pass
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *x):
-        return None
-
-    async def post(self, url, json=None, headers=None):
+    async def post(self, url, json=None, headers=None, timeout=None):
         _FakeHTTP.captured = {"url": url, "json": json, "headers": headers}
         return _Resp({
             "choices": [{"message": {"content": "pong"}}],
@@ -65,9 +56,9 @@ class _FakeHTTP:
 
 
 async def test_request_assembly(monkeypatch):
-    import httpx
+    from app.integrations.llm import client as llm_client_mod
     _FakeHTTP.captured = {}
-    monkeypatch.setattr(httpx, "AsyncClient", _FakeHTTP)
+    monkeypatch.setattr(llm_client_mod, "_shared_http", _FakeHTTP())
     client = LLMClient("deepseek", {
         "base_url": "https://api.deepseek.com",
         "api_key": "sk-x", "model": "deepseek-chat", "temperature": 0.1,
@@ -82,9 +73,9 @@ async def test_request_assembly(monkeypatch):
 
 
 async def test_minimax_no_response_format(monkeypatch):
-    import httpx
+    from app.integrations.llm import client as llm_client_mod
     _FakeHTTP.captured = {}
-    monkeypatch.setattr(httpx, "AsyncClient", _FakeHTTP)
+    monkeypatch.setattr(llm_client_mod, "_shared_http", _FakeHTTP())
     client = LLMClient("minimax", {"api_key": "mm", "model": "MiniMax-M1"})
     await client.chat([{"role": "user", "content": "hi"}], json_mode=True)
     assert "response_format" not in _FakeHTTP.captured["json"]

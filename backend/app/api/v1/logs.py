@@ -28,6 +28,8 @@ async def query(
     end: str | None = None,
     keyword: str = "",
     host: str = "",
+    level: str = Query(default="", description="日志级别，如 error/warn/info"),
+    source: str = Query(default="", description="来源，如 input/job/index"),
     limit: int = Query(default=100, ge=1, le=500),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
@@ -37,9 +39,9 @@ async def query(
         end_ts = zabbix_service.parse_time(end) or now
     except ValueError as exc:
         raise BizError(str(exc), code="bad_time")
-    # 关键词按逗号/空白切分，多词 OR；原始串同时透传给平台原生查询
     keywords = split_keywords(keyword)
     return await log_service.query_logs(
         db, platform=platform, start_ts=start_ts, end_ts=end_ts,
-        keyword=keyword, host=host, limit=limit, keywords=keywords or None,
+        keyword=keyword, host=host, level=level, source=source,
+        limit=limit, keywords=keywords or None,
     )

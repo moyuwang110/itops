@@ -33,7 +33,8 @@ const routes = [
         component: () => import('../views/reports/ReportDetailView.vue'),
         meta: { title: '报告详情', group: '告警中心', icon: 'Document', hidden: true },
       },
-      { path: 'monitoring', name: 'monitoring', component: () => import('../views/monitoring/MonitoringView.vue'), meta: { title: '监控数据', icon: 'Monitor' } },
+      { path: 'monitoring', name: 'monitoring', component: () => import('../views/monitoring/MonitoringView.vue'), meta: { title: '主机与监控项', icon: 'Monitor' } },
+      { path: 'monitoring/problems', name: 'monitoring-problems', component: () => import('../views/monitoring/ProblemsView.vue'), meta: { title: '未恢复问题', icon: 'Warning' } },
       { path: 'logs', name: 'logs', component: () => import('../views/logs/LogQueryView.vue'), meta: { title: '日志查询', icon: 'Tickets' } },
       {
         path: 'settings/:tab?',
@@ -62,10 +63,12 @@ const router = createRouter({
 
 router.beforeEach((to) => {
   const auth = useAuthStore()
-  if (!to.meta.public && !auth.token) {
+  // token 由 httpOnly Cookie 管理，前端用 username 作为已登录的快速判断
+  // （真正的鉴权由后端 Cookie 校验，401 时响应拦截器会跳转登录）
+  if (!to.meta.public && !auth.username) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
-  if (to.name === 'login' && auth.token) {
+  if (to.name === 'login' && auth.username) {
     return { name: 'dashboard' }
   }
   return true

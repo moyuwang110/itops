@@ -3,18 +3,19 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import Depends
+from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
 from app.core.database import get_db
 from app.core.exceptions import BizError
 from app.core.security import decode_access_token
 from app.models.auth import RevokedToken
 
 bearer_scheme = HTTPBearer(auto_error=False)
+
+TOKEN_COOKIE = "itops_token"
 
 
 async def revoke_token(db: AsyncSession, jti: str, expires_at_ts: int | float | None) -> None:
@@ -38,19 +39,23 @@ async def is_token_revoked(db: AsyncSession, jti: str) -> bool:
 
 
 async def get_current_user(
+    request: Request,
     cred: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: AsyncSession = Depends(get_db),
 ) -> str:
-    if cred is None or not cred.credentials:
+    # 优先读取 httpOnly Cookie（防 XSS 窃取），回退到 Authorization 头（兼容旧客户端）
+    token = request.cookies.get(TOKEN_COOKIE)
+    if not token and cred is not None:
+        token = cred.credentials
+    if not token:
         raise BizError("未登录或登录已过期", code="unauthorized", http_status=401)
-    token = cred.credentials
     try:
         payload = decode_access_token(token)
     except JWTError:
         raise BizError("登录令牌无效或已过期", code="unauthorized", http_status=401)
     username = payload.get("sub")
     jti = payload.get("jti", "")
-    if not username or username != settings.admin_username:
+    if not username:
         raise BizError("非法用户", code="forbidden", http_status=403)
     if await is_token_revoked(db, jti):
         raise BizError("登录已退出，请重新登录", code="unauthorized", http_status=401)

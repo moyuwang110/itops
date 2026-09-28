@@ -4,13 +4,11 @@ import { ElMessage } from 'element-plus'
 const api = axios.create({
   baseURL: '/api/v1',
   timeout: 60000,
+  // 携带 httpOnly Cookie（后端通过 Cookie 鉴权，token 不再存 localStorage）
+  withCredentials: true,
 })
 
-api.interceptors.request.use((config) => {
-  const tk = localStorage.getItem('itops-token')
-  if (tk) config.headers.Authorization = `Bearer ${tk}`
-  return config
-})
+api.interceptors.request.use((config) => config)
 
 api.interceptors.response.use(
   (resp) => resp,
@@ -23,7 +21,6 @@ api.interceptors.response.use(
     if (status === 401 || code === 'unauthorized') {
       const path = window.location.hash.replace('#', '') || '/'
       if (!path.startsWith('/login')) {
-        localStorage.removeItem('itops-token')
         ElMessage.warning('登录已过期，请重新登录')
         window.location.hash = '#/login'
       }

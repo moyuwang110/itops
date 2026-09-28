@@ -60,6 +60,7 @@ async def query_trend(db: AsyncSession, item_id: str, value_type: int,
     return await client.trend(item_id, value_type, start, end, limit)
 
 
-async def query_problems(db: AsyncSession, limit: int) -> list[dict[str, Any]]:
+async def query_problems(db: AsyncSession, limit: int, host: str | None = None,
+                         severities: list[int] | None = None) -> list[dict[str, Any]]:
     client = await get_zabbix_client(db)
-    return await client.current_problems(limit)
+    return await client.current_problems(limit, host=host, severities=severities)

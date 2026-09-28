@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     # 外部调用
     http_timeout: float = 120.0
 
+    # Cookie 安全：仅 HTTPS 部署时置 true（nginx HTTP 反代场景需 false）
+    cookie_secure: bool = False
+
     # 分析默认参数
     analysis_auto_enabled: bool = True
     analysis_before_minutes: int = 30

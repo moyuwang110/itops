@@ -28,10 +28,14 @@ GOOD_RESULT = """```json
 }
 ```"""
 
+from datetime import datetime, timedelta, timezone
+
+# 告警时间设为 2 小时前，确保落在 dashboard 的 24h 窗口内
+_alert_dt = datetime.now(timezone.utc) - timedelta(hours=2)
 PROBLEM = {
     "event_id": "EVT-A1", "host": "web01", "trigger": "CPU utilization > 90%",
     "severity": "严重", "status": "PROBLEM",
-    "datetime": "2026-09-22 10:05:00",
+    "datetime": _alert_dt.strftime("%Y-%m-%d %H:%M:%S"),
 }
 
 

@@ -19,12 +19,14 @@ class LoginResponse(BaseModel):
     token_type: str = "bearer"
     expires_in: int
     username: str
+    avatar: str | None = None
 
 
-def build_login_response(username: str) -> LoginResponse:
+def build_login_response(username: str, avatar: str | None = None) -> LoginResponse:
     token = create_access_token(username, {"jti": uuid.uuid4().hex})
     return LoginResponse(
         access_token=token,
         expires_in=settings.jwt_expire_minutes * 60,
         username=username,
+        avatar=avatar,
     )

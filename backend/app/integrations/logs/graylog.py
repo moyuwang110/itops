@@ -92,7 +92,7 @@ class GraylogClient(LogPlatformClient):
                 message=str(msg.get("message") or ""),
                 raw=msg,
             ))
-        return rows
+        return self._filter_rows(rows, q)
 
 
 def _gray_ts(value: Any) -> int | None:

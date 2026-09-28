@@ -4,6 +4,31 @@
 
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.2.0] - 2026-09-28
+
+### 新增
+
+- **用户管理**：新增 `users` 表（用户名/密码哈希/头像），认证从配置文件硬编码改为数据库用户模式；启动时自动播种初始管理员（幂等）
+- **个人设置**：点击右上角头像下拉菜单「个人设置」，可修改用户名、头像（URL 或本地上传转 base64）、密码（需验证原密码）
+- **PostgreSQL 支持**：数据库切换为 PostgreSQL-18（`pgsql18.hdks.cn:5432`），驱动 `asyncpg`
+- **未恢复问题独立菜单**：「监控数据」改为子菜单，新增「未恢复问题」页面
+- **未恢复问题筛选**：支持按主机名关键字和告警级别筛选
+- **日志查询筛选**：新增日志级别（fatal/error/warn/info/debug/trace）和来源筛选
+
+### 修复
+
+- **Zabbix `problem.get` 报错**：移除 `problem.get` 不支持的 `selectHosts` 参数，改用 `trigger.get` + `selectHosts` 关联主机
+- **登录「请求校验参数失败」**：修复 `auth.js` 的 `login()` 函数参数解构问题，将 Vue 响应式 form 对象提取为纯对象再提交
+- **大模型 401 鉴权失败**：MiniMax 密钥为国内区，将 `base_url` 从 `https://api.minimax.io/v1` 修正为 `https://api.minimax.cn/v1`
+
+### 变更
+
+- 默认管理员密码改为 `ITOPS@ecidh.com`
+- 认证响应（`/auth/login`、`/auth/me`）增加 `avatar` 字段
+- 新增接口：`GET /auth/me`、`PUT /auth/profile`、`PUT /auth/password`
+- Zabbix `/problems` 接口新增 `host`、`severities` 查询参数
+- 日志 `/query` 接口新增 `level`、`source` 查询参数
+
 ## [0.1.0] - 2026-09-23
 
 首个公开版本。

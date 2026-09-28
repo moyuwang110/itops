@@ -103,7 +103,7 @@ class ElasticsearchClient(LogPlatformClient):
                 message=str(message),
                 raw=src,
             ))
-        return rows
+        return self._filter_rows(rows, q)
 
 
 def _es_time(ts: int) -> str:

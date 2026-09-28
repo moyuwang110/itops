@@ -25,6 +25,16 @@ _THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
 # 处理被 max_tokens 截断、未闭合的 <think>
 _UNCLOSED_THINK_RE = re.compile(r"<think>.*$", re.DOTALL | re.IGNORECASE)
 
+# 共享 httpx 客户端：所有 LLM 调用复用同一连接池，避免频繁建连/关闭
+# LLM 均为公网 HTTPS 接口，固定 verify=True
+_shared_http = httpx.AsyncClient(verify=True)
+
+
+async def close_shared_clients() -> None:
+    """关闭共享 httpx 客户端（应用停止时调用）。"""
+    if not _shared_http.is_closed:
+        await _shared_http.aclose()
+
 PROVIDER_META: dict[str, dict[str, str]] = {
     "deepseek": {
         "label": "DeepSeek",
@@ -99,8 +109,8 @@ class LLMClient:
             "Content-Type": "application/json",
         }
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as http:
-                resp = await http.post(self._endpoint(), json=body, headers=headers)
+            resp = await _shared_http.post(self._endpoint(), json=body,
+                                            headers=headers, timeout=self.timeout)
         except httpx.HTTPError as exc:
             logger.warning("LLM HTTP 异常 provider=%s type=%s: %r",
                            self.provider, type(exc).__name__, exc)

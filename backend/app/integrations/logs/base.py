@@ -13,6 +13,8 @@ class LogQuery:
     end_ts: int
     keyword: str = ""          # 原始查询串（用户输入，平台原生语法）
     host: str = ""
+    level: str = ""            # 日志级别筛选（归一化后匹配，如 error/warn/info）
+    source: str = ""           # 来源筛选（如 graylog input / loki job / es index）
     limit: int = 100
     # 多关键词（任一匹配，OR 语义）；为空则回退到 keyword
     keywords: list[str] | None = None
@@ -33,6 +35,21 @@ class LogPlatformClient:
         now = int(datetime.now(timezone.utc).timestamp())
         rows = await self.query(LogQuery(now - 300, now, limit=5))
         return len(rows)
+
+    def _filter_rows(self, rows: list[dict], q: LogQuery) -> list[dict]:
+        """归一化后按 level / source 过滤（跨平台统一）。"""
+        if not q.level and not q.source:
+            return rows
+        lv = q.level.strip().lower()
+        src = q.source.strip().lower()
+        out: list[dict] = []
+        for r in rows:
+            if lv and lv not in (r.get("level") or "").lower():
+                continue
+            if src and src not in (r.get("source") or "").lower():
+                continue
+            out.append(r)
+        return out
 
     def _error(self, message: str, detail=None) -> IntegrationError:
         return IntegrationError(self.platform, message, detail=detail)
