@@ -128,3 +128,11 @@ async def notify_report(
         raise BizError("没有可用的已启用通知渠道，请先在集成配置中启用飞书/企业微信",
                        code="no_channel")
     return {"ok": True, "results": results}
+
+
+@router.delete("/{report_id}", summary="删除分析报告")
+async def delete_report(report_id: int, db: AsyncSession = Depends(get_db)) -> dict:
+    ok = await report_service.delete_report(db, report_id)
+    if not ok:
+        raise BizError("报告不存在", code="not_found", http_status=404)
+    return {"ok": True}

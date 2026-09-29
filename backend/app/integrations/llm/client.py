@@ -86,6 +86,14 @@ class LLMClient:
         if not self.api_key:
             raise IntegrationError(provider, "API Key 未配置")
 
+    def apply_overrides(self, model: str | None = None,
+                        temperature: float | None = None) -> None:
+        """Agent 可在实例化后临时覆盖模型与温度（不影响原 config）。"""
+        if model:
+            self.model = model
+        if temperature is not None:
+            self.temperature = float(temperature)
+
     def _endpoint(self) -> str:
         if self.base_url.endswith("/chat/completions"):
             return self.base_url
@@ -150,6 +158,12 @@ class LLMChain:
         if not clients:
             raise IntegrationError("llm", "未配置可用的大模型供应商")
         self.clients = clients
+
+    def apply_overrides(self, model: str | None = None,
+                        temperature: float | None = None) -> None:
+        """对链内所有客户端应用相同的 override（Agent 场景）。"""
+        for c in self.clients:
+            c.apply_overrides(model=model, temperature=temperature)
 
     async def chat(self, messages: list[dict[str, str]],
                    json_mode: bool = False,

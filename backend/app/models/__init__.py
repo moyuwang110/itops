@@ -1,4 +1,5 @@
 """ORM 模型聚合导入。"""
+from app.models.agent import Agent
 from app.models.alert import Alert
 from app.models.auth import RevokedToken
 from app.models.config import IntegrationConfig, SystemSetting
@@ -17,6 +18,7 @@ from app.models.constants import (
 from app.models.report import NotificationRecord, Report
 
 __all__ = [
+    "Agent",
     "Alert",
     "RevokedToken",
     "IntegrationConfig",

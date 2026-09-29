@@ -32,6 +32,11 @@ class Report(Base, TimestampMixin):
     duration_ms: Mapped[int] = mapped_column(Integer, default=0)
     # 分析所用窗口与关键词等参数快照
     params: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    # 触发本次分析的 Agent；为空表示默认根因分析
+    agent_id: Mapped[int | None] = mapped_column(
+        ForeignKey("agents.id", ondelete="SET NULL"), index=True, nullable=True
+    )
+    agent_name: Mapped[str] = mapped_column(String(64), default="")
 
 
 class NotificationRecord(Base, TimestampMixin):

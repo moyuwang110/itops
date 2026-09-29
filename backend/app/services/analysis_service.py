@@ -52,7 +52,7 @@ async def recover_stale() -> int:
         return result.rowcount or 0
 
 
-async def run_analysis(alert_id: int) -> dict[str, Any]:
+async def run_analysis(alert_id: int, agent_id: int | None = None) -> dict[str, Any]:
     if alert_id in _running:
         logger.info("告警 %s 正在分析中，跳过重复触发", alert_id)
         raise AnalysisBusyError(f"告警 {alert_id} 正在分析中")
@@ -60,7 +60,7 @@ async def run_analysis(alert_id: int) -> dict[str, Any]:
     start = time.time()
     try:
         async with AsyncSessionLocal() as db:
-            return await _run_with_session(db, alert_id, start)
+            return await _run_with_session(db, alert_id, start, agent_id)
     finally:
         _running.discard(alert_id)
 
@@ -73,7 +73,7 @@ async def _set_status(db: AsyncSession, alert: Alert, status: str,
 
 
 async def _run_with_session(db: AsyncSession, alert_id: int,
-                            start: float) -> dict[str, Any]:
+                            start: float, agent_id: int | None = None) -> dict[str, Any]:
     alert = await db.get(Alert, alert_id)
     if alert is None:
         raise ValueError(f"告警不存在: {alert_id}")
@@ -115,7 +115,21 @@ async def _run_with_session(db: AsyncSession, alert_id: int,
         )
 
         # 3) 大模型分析（默认供应商 + 备用降级）
-        chain = await llm_service.get_llm_chain(db)
+        agent = None
+        agent_obj = None
+        if agent_id is not None:
+            from app.models.agent import Agent
+            agent_obj = await db.get(Agent, agent_id)
+            if agent_obj is None:
+                raise ValueError(f"Agent 不存在: {agent_id}")
+            agent = {"id": agent_obj.id, "name": agent_obj.name,
+                     "provider": agent_obj.provider, "model": agent_obj.model}
+            chain = await llm_service.get_llm_chain(db, providers=[agent_obj.provider])
+            chain.apply_overrides(model=agent_obj.model or None,
+                                  temperature=agent_obj.temperature)
+        else:
+            chain = await llm_service.get_llm_chain(db)
+
         alert_view = {
             "host": alert.host,
             "title": alert.title,
@@ -123,7 +137,9 @@ async def _run_with_session(db: AsyncSession, alert_id: int,
             "occurred_at": to_iso(alert.occurred_at) or "",
             "detail_text": alert.detail_text,
         }
-        messages = build_analysis_messages(alert_view, metric_ctx, log_ctx)
+        system_prompt = agent_obj.system_prompt if agent_obj else None
+        messages = build_analysis_messages(alert_view, metric_ctx, log_ctx,
+                                           system_prompt=system_prompt)
 
         llm_resp = await chain.chat(messages, json_mode=True, max_tokens=8192)
         raw_content = llm_resp.content
@@ -133,7 +149,7 @@ async def _run_with_session(db: AsyncSession, alert_id: int,
             # 一次修复重试
             logger.warning("结构化解析失败，发起修复重试: %s", parse_err)
             llm_resp = await chain.chat(
-                repair_messages(str(parse_err), raw_content),
+                repair_messages(str(parse_err), raw_content, system_prompt=system_prompt),
                 json_mode=True, max_tokens=8192,
             )
             result = parse_structured_json(llm_resp.content)
@@ -147,6 +163,8 @@ async def _run_with_session(db: AsyncSession, alert_id: int,
             "model": llm_resp.model,
             "degraded_from": llm_resp.degraded_from,
             "duration_ms": duration_ms,
+            "agent_id": agent_obj.id if agent_obj else None,
+            "agent_name": agent_obj.name if agent_obj else "",
         }
         params = {
             "before_minutes": before,

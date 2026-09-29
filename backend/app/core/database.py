@@ -85,3 +85,27 @@ async def init_models() -> None:
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    # 兼容存量库：Base.metadata.create_all 不会给已有表加新字段
+    # 仅 PostgreSQL 走 schema diff（SQLite 不支持 IF NOT EXISTS 子句需单独处理）。
+    if settings.database_url.startswith("postgresql"):
+        await _apply_pg_schema_diffs()
+
+
+# 字段补齐清单：键为"表.列"，值为目标列类型（与模型定义保持同步）。
+# 仅覆盖"新增字段"场景（additive migration），不做 drop/rename。
+_PG_COLUMN_DDL = {
+    "reports.agent_id": "INTEGER",
+    "reports.agent_name": "VARCHAR(64)",
+    "alerts.acknowledged": "BOOLEAN DEFAULT FALSE",
+}
+
+
+async def _apply_pg_schema_diffs() -> None:
+    """给已存在的 PostgreSQL 表加上模型里新增的列，避免运行时 UndefinedColumnError。"""
+    from sqlalchemy import text
+    async with engine.begin() as conn:
+        for qualified, col_type in _PG_COLUMN_DDL.items():
+            table, col = qualified.split(".", 1)
+            await conn.execute(text(
+                f'ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {col_type}'
+            ))

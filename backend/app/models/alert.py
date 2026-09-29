@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, Index, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin
@@ -29,6 +29,8 @@ class Alert(Base, TimestampMixin):
     # 原始级别（Zabbix: Not classified/Information/Warning/Average/High/Disaster 或数字）
     severity: Mapped[str] = mapped_column(String(32), default="", index=True)
     status: Mapped[str] = mapped_column(String(16), default=ALERT_PROBLEM, index=True)
+    # 用户确认/忽略标记：True 表示已确认，默认告警列表不展示
+    acknowledged: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
 
     occurred_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
     recovered_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

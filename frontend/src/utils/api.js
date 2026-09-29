@@ -6,6 +6,9 @@ const api = axios.create({
   timeout: 60000,
   // 携带 httpOnly Cookie（后端通过 Cookie 鉴权，token 不再存 localStorage）
   withCredentials: true,
+  // 数组参数序列化为 repeat 格式（severities=3&severities=4），
+  // 避免默认的 severities[]=3 格式导致 FastAPI Query(list) 解析失败
+  paramsSerializer: { indexes: null },
 })
 
 api.interceptors.request.use((config) => config)

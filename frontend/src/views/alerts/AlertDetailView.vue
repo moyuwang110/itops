@@ -25,6 +25,12 @@
           </div>
         </div>
         <div class="alert-head-actions">
+          <el-select v-model="selectedAgentId" placeholder="选择 Agent（默认走默认供应商）" clearable
+                     size="default" style="width:220px" :disabled="analyzing">
+            <el-option v-for="a in agentStore.list" :key="a.id"
+                       :label="`${a.name}（${a.provider}/${a.model || '默认'}）${a.is_default ? ' · 默认' : ''}`"
+                       :value="a.id" />
+          </el-select>
           <el-button type="primary" :icon="MagicStick" :loading="analyzing"
                      @click="runAnalyze">
             {{ alert.analysis_status === 'pending' ? '立即分析' : '重新分析' }}
@@ -101,6 +107,11 @@
             <el-icon color="var(--el-color-primary)"><MagicStick /></el-icon> AI 根因分析
             <el-tag v-if="report" size="small" type="info" effect="plain" style="margin-left:auto">
               {{ report.provider }}/{{ report.model }}
+            </el-tag>
+          </div>
+          <div v-if="report && report.agent_name" class="agent-tag-line">
+            <el-tag type="success" size="small" effect="plain">
+              <el-icon><MagicStick /></el-icon> Agent：{{ report.agent_name }}
             </el-tag>
           </div>
           <template v-if="report">
@@ -197,13 +208,16 @@ import api from '../../utils/api'
 import EChart from '../../components/EChart.vue'
 import { alertTag, analysisTag, fmtTime, severityTag } from '../../utils/format'
 import { useThemeStore } from '../../stores/theme'
+import { useAgentStore } from '../../stores/agent'
 
 const route = useRoute()
 const theme = useThemeStore()
+const agentStore = useAgentStore()
 
 const loading = ref(false)
 const analyzing = ref(false)
 const alert = reactive({})
+const selectedAgentId = ref(null)
 const report = ref(null)
 const notifications = ref([])
 const channelOptions = ref([])
@@ -304,7 +318,8 @@ async function runAnalyze() {
   analyzing.value = true
   try {
     // 后台异步执行：提交成功后进入轮询，直到 success/failed
-    await api.post(`/alerts/${route.params.id}/analyze`)
+    const params = selectedAgentId.value ? { agent_id: selectedAgentId.value } : {}
+    await api.post(`/alerts/${route.params.id}/analyze`, null, { params })
     ElMessage.success('分析任务已提交，正在后台执行…')
     await loadDetail()
     startPolling()
@@ -403,7 +418,7 @@ function locate(ev) {
 }
 
 onMounted(async () => {
-  await Promise.all([loadDetail(), loadChannels()])
+  await Promise.all([loadDetail(), loadChannels(), agentStore.load().catch(() => {})])
   if (alert.analysis_status === 'processing') startPolling()
 })
 onBeforeUnmount(stopPolling)
@@ -448,6 +463,10 @@ onBeforeUnmount(stopPolling)
 .analysis-error {
   margin-top: 8px;
   color: var(--el-color-danger);
+  font-size: 12px;
+}
+.agent-tag-line {
+  margin-bottom: 8px;
   font-size: 12px;
 }
 .series-chips {

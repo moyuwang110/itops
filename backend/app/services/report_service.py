@@ -19,6 +19,16 @@ async def get_report(db: AsyncSession, report_id: int) -> Report | None:
     return await db.get(Report, report_id)
 
 
+async def delete_report(db: AsyncSession, report_id: int) -> bool:
+    """删除指定报告，返回是否删除成功。"""
+    report = await get_report(db, report_id)
+    if report is None:
+        return False
+    await db.delete(report)
+    await db.commit()
+    return True
+
+
 def render_markdown(alert: dict[str, Any], result: dict[str, Any],
                     metric_ctx: dict[str, Any], log_ctx: dict[str, Any],
                     meta: dict[str, Any]) -> str:
@@ -125,6 +135,8 @@ async def upsert_report(db: AsyncSession, alert_id: int, result: dict[str, Any],
     report.degraded_from = meta.get("degraded_from", "")
     report.duration_ms = meta.get("duration_ms", 0)
     report.params = params
+    report.agent_id = meta.get("agent_id")
+    report.agent_name = meta.get("agent_name", "")
     await db.commit()
     await db.refresh(report)
     return report
@@ -142,6 +154,8 @@ def serialize_report(report: Report, include_markdown: bool = True) -> dict[str,
         "degraded_from": report.degraded_from,
         "duration_ms": report.duration_ms,
         "params": report.params,
+        "agent_id": report.agent_id,
+        "agent_name": report.agent_name,
         "created_at": to_iso(report.created_at),
     }
     if include_markdown:

@@ -9,11 +9,18 @@ const routes = [
     redirect: '/dashboard',
     children: [
       { path: 'dashboard', name: 'dashboard', component: () => import('../views/DashboardView.vue'), meta: { title: '总览仪表盘', icon: 'Odometer' } },
+      { path: 'workbench', name: 'workbench', component: () => import('../views/WorkbenchView.vue'), meta: { title: '工作台', icon: 'Platform' } },
       {
         path: 'alerts',
         name: 'alerts',
         component: () => import('../views/alerts/AlertListView.vue'),
         meta: { title: '告警列表', group: '告警中心', icon: 'Bell' },
+      },
+      {
+        path: 'alerts/resolved',
+        name: 'alerts-resolved',
+        component: () => import('../views/alerts/ResolvedAlertsView.vue'),
+        meta: { title: '已恢复告警', group: '告警中心', icon: 'CircleCheck' },
       },
       {
         path: 'alerts/:id',
@@ -36,6 +43,7 @@ const routes = [
       { path: 'monitoring', name: 'monitoring', component: () => import('../views/monitoring/MonitoringView.vue'), meta: { title: '主机与监控项', icon: 'Monitor' } },
       { path: 'monitoring/problems', name: 'monitoring-problems', component: () => import('../views/monitoring/ProblemsView.vue'), meta: { title: '未恢复问题', icon: 'Warning' } },
       { path: 'logs', name: 'logs', component: () => import('../views/logs/LogQueryView.vue'), meta: { title: '日志查询', icon: 'Tickets' } },
+      { path: 'agents', name: 'agents', component: () => import('../views/settings/AgentsView.vue'), meta: { title: 'AI Agent', icon: 'MagicStick' } },
       {
         path: 'settings/:tab?',
         name: 'settings',

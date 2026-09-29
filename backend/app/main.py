@@ -1,6 +1,7 @@
 """ITOPS 后端入口。"""
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -18,6 +19,22 @@ from app.models.auth import RevokedToken
 import app.integrations.loader  # noqa: F401  注册外部平台适配器
 
 logger = logging.getLogger(__name__)
+
+# Zabbix 告警同步间隔（秒）
+ALERT_SYNC_INTERVAL = 60
+
+
+async def _alert_sync_loop() -> None:
+    """后台循环：定时同步 Zabbix 当前未恢复问题到本地 alerts 表。"""
+    from app.services.alert_sync_service import sync_zabbix_alerts
+
+    while True:
+        try:
+            async with AsyncSessionLocal() as db:
+                await sync_zabbix_alerts(db)
+        except Exception:  # noqa: BLE001
+            logger.exception("定时同步 Zabbix 告警异常")
+        await asyncio.sleep(ALERT_SYNC_INTERVAL)
 
 
 @asynccontextmanager
@@ -47,9 +64,16 @@ async def lifespan(app: FastAPI):  # noqa: ANN201
             logger.warning("启动回收：%s 个中断的分析任务已重置为 pending", reset)
     except Exception:  # noqa: BLE001
         logger.exception("启动回收 processing 告警失败")
+    # 启动后立即同步一次 Zabbix 告警，再进入定时循环
+    sync_task = asyncio.create_task(_alert_sync_loop())
     logger.info("ITOPS 后端启动完成", extra={"db": settings.database_url.split(":", 1)[0]})
     yield
     # 关闭共享 httpx 客户端，释放连接资源
+    sync_task.cancel()
+    try:
+        await sync_task
+    except asyncio.CancelledError:
+        pass
     try:
         from app.integrations.llm.client import close_shared_clients as close_llm
         from app.integrations.zabbix.client import close_shared_clients as close_zabbix
@@ -63,7 +87,7 @@ def create_app() -> FastAPI:
     configure_logging(settings.debug)
     app = FastAPI(
         title=settings.app_name,
-        version="0.1.0",
+        version="0.2.0",
         docs_url="/docs" if settings.enable_docs else None,
         redoc_url="/redoc" if settings.enable_docs else None,
         openapi_url="/openapi.json" if settings.enable_docs else None,

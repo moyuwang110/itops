@@ -6,8 +6,9 @@
       <div class="filter-bar">
         <el-input v-model="hostKeyword" placeholder="主机名关键字" clearable
                   size="default" style="width:200px" @keyup.enter="loadProblems" />
-        <el-select v-model="selectedSev" placeholder="告警级别" clearable
-                   size="default" style="width:140px" @change="loadProblems">
+        <el-select v-model="selectedSevs" placeholder="告警级别（可多选）" multiple collapse-tags
+                   collapse-tags-tooltip clearable size="default" style="width:200px"
+                   @change="loadProblems">
           <el-option v-for="s in SEV_OPTIONS" :key="s.value"
                      :label="s.label" :value="s.value" />
         </el-select>
@@ -68,7 +69,7 @@ function sevLabel(v) {
 }
 
 const hostKeyword = ref('')
-const selectedSev = ref('')
+const selectedSevs = ref([])
 const problems = ref([])
 const loading = ref(false)
 
@@ -77,8 +78,8 @@ async function loadProblems() {
   try {
     const params = { limit: 100 }
     if (hostKeyword.value.trim()) params.host = hostKeyword.value.trim()
-    if (selectedSev.value !== '' && selectedSev.value !== null) {
-      params.severities = [selectedSev.value]
+    if (selectedSevs.value && selectedSevs.value.length) {
+      params.severities = selectedSevs.value
     }
     const { data } = await api.get('/zabbix/problems', { params })
     problems.value = data
@@ -89,7 +90,7 @@ async function loadProblems() {
 
 function resetFilter() {
   hostKeyword.value = ''
-  selectedSev.value = ''
+  selectedSevs.value = []
   loadProblems()
 }
 

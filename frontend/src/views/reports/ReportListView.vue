@@ -40,11 +40,18 @@
         <el-table-column label="生成时间" width="170">
           <template #default="{ row }">{{ fmtTime(row.created_at) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="190" fixed="right">
+        <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="$router.push(`/reports/${row.id}`)">查看</el-button>
             <el-button link type="primary" size="small" @click="goWorkbench(row)">工作台</el-button>
             <el-button link type="primary" size="small" @click="exportMd(row)">导出</el-button>
+            <el-popconfirm title="确认删除该分析报告？删除后不可恢复。"
+                           confirm-button-text="删除" cancel-button-text="取消"
+                           confirm-button-type="danger" @confirm="removeReport(row)">
+              <template #reference>
+                <el-button link type="danger" size="small">删除</el-button>
+              </template>
+            </el-popconfirm>
           </template>
         </el-table-column>
         <template #empty><el-empty description="暂无分析报告" /></template>
@@ -63,6 +70,7 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Search } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import api from '../../utils/api'
 import { fmtTime, severityTag } from '../../utils/format'
 
@@ -108,6 +116,21 @@ async function exportMd(row) {
   a.download = `itops-report-${row.alert_id}.md`
   a.click()
   URL.revokeObjectURL(url)
+}
+
+async function removeReport(row) {
+  try {
+    await api.delete(`/reports/${row.id}`)
+    ElMessage.success('报告已删除')
+    // 删除后若当前页已空且非第一页，则回退一页
+    if (rows.value.length === 1 && page.value > 1) {
+      load(page.value - 1)
+    } else {
+      load(page.value)
+    }
+  } catch (e) {
+    // 拦截器已提示
+  }
 }
 
 onMounted(() => load(1))

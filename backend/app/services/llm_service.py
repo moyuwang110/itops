@@ -9,9 +9,13 @@ from app.models.constants import CFG_LLM
 from app.services.config_service import decrypt_settings, list_configs
 
 
-async def get_llm_chain(db: AsyncSession) -> LLMChain:
+async def get_llm_chain(db: AsyncSession, providers: list[str] | None = None) -> LLMChain:
     rows = [r for r in await list_configs(db, CFG_LLM) if r.enabled]
+    if providers:
+        rows = [r for r in rows if r.provider in providers]
     if not rows:
+        if providers:
+            raise ConfigMissingError(f"指定的供应商未启用: {providers}")
         raise ConfigMissingError("大模型供应商")
     # 默认供应商排第一，其余按 priority
     rows.sort(key=lambda r: (not r.is_default, r.priority, r.id))

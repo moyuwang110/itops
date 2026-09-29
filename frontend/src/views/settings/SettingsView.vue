@@ -126,8 +126,13 @@
                   <el-form-item label="启用"><el-switch v-model="forms.logs[p.key].enabled" /></el-form-item>
                   <el-form-item>
                     <el-button type="primary" size="small" @click="save('logs', p.key)">保存</el-button>
+                    <el-button size="small" :disabled="!ids.logs[p.key]" @click="test('logs', p.key)">连通性测试</el-button>
                     <el-button size="small" type="danger" plain :disabled="!ids.logs[p.key]" @click="remove('logs', p.key)">删除</el-button>
                   </el-form-item>
+                  <el-tag v-if="resultOf('logs', p.key)" size="small"
+                          :type="resultOf('logs', p.key).ok ? 'success' : 'danger'">
+                    {{ resultOf('logs', p.key).message }}
+                  </el-tag>
                 </el-form>
               </el-card>
             </el-col>

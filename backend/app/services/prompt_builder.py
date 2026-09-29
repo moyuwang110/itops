@@ -28,7 +28,8 @@ def _fmt_ts(ts: int) -> str:
 
 
 def build_analysis_messages(alert: dict[str, Any], metric_ctx: dict[str, Any],
-                            log_ctx: dict[str, Any]) -> list[dict[str, str]]:
+                            log_ctx: dict[str, Any],
+                            system_prompt: str | None = None) -> list[dict[str, str]]:
     lines: list[str] = ["【告警信息】"]
     lines.append(f"- 主机：{alert.get('host') or '未知'}")
     lines.append(f"- 告警标题：{alert.get('title') or ''}")
@@ -83,7 +84,7 @@ def build_analysis_messages(alert: dict[str, Any], metric_ctx: dict[str, Any],
         "\n请按系统消息约定的 JSON 结构输出根因分析结果。"
     )
     return [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt or SYSTEM_PROMPT},
         {"role": "user", "content": "\n".join(lines)},
     ]
 
@@ -96,9 +97,10 @@ REPAIR_PROMPT = (
 )
 
 
-def repair_messages(error: str, previous: str) -> list[dict[str, str]]:
+def repair_messages(error: str, previous: str,
+                    system_prompt: str | None = None) -> list[dict[str, str]]:
     return [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt or SYSTEM_PROMPT},
         {"role": "user", "content": REPAIR_PROMPT.format(
             error=str(error)[:200], previous=previous[:6000]
         )},
