@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import json
 import os
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -45,10 +46,17 @@ def create_access_token(subject: str, extra: dict[str, Any] | None = None) -> st
     now = datetime.now(timezone.utc)
     payload: dict[str, Any] = {
         "sub": subject,
+        "jti": uuid.uuid4().hex,
         "iat": int(now.timestamp()),
         "exp": now + timedelta(minutes=settings.jwt_expire_minutes),
     }
     if extra:
+        # extra 中由本协议时不应覆盖用户原有的 JWT 标准字段；若传 sub 以标准字段为准
+        # 其余 jti / iat / exp 仍由本函数控制，外部传入时静默忽略，避免错误改动 token 语义
+        for k in ("jti", "iat", "exp"):
+            extra.pop(k, None)
+        if "sub" in extra:
+            payload["sub"] = extra.pop("sub")
         payload.update(extra)
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
@@ -57,7 +65,16 @@ def decode_access_token(token: str) -> dict[str, Any]:
     return jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
 
 
-__all__ = ["JWTError", "create_access_token", "decode_access_token"]
+def decode_access_token_unverified(token: str) -> dict[str, Any]:
+    """仅在登出清理场景使用：解析 token 拿到 jti/exp，签名校验失败也不抛。"""
+    try:
+        return jwt.decode(token, settings.jwt_secret_key,
+                          algorithms=[settings.jwt_algorithm], options={"verify_exp": False})
+    except JWTError:
+        return {}
+
+
+__all__ = ["JWTError", "create_access_token", "decode_access_token", "decode_access_token_unverified"]
 
 
 # ---------- 第三方凭据加密 ----------

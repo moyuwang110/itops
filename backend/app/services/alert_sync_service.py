@@ -67,12 +67,33 @@ async def sync_zabbix_alerts(db: AsyncSession) -> dict[str, int]:
     created = 0
     updated = 0
 
+    # 收集所有 host_id，批量查询主机接口 IP（一次 RPC，避免 N+1）
+    host_id_set: set[str] = set()
+    for p in problems:
+        hosts = p.get("hosts") or []
+        if hosts:
+            hid = hosts[0].get("host_id")
+            if hid:
+                host_id_set.add(str(hid))
+    ip_map: dict[str, str] = {}
+    if host_id_set:
+        try:
+            ip_map = await client.get_hosts_ip_map(list(host_id_set))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("查询 Zabbix 主机 IP 失败，告警 IP 字段将留空：%s", exc)
+
     for p in problems:
         data = _problem_to_alert_data(p)
         eid = data["event_id"]
         if not eid:
             continue
         current_ids.add(eid)
+
+        # 从批量查询结果中取该主机的 IP
+        host_ip = ""
+        hosts = p.get("hosts") or []
+        if hosts:
+            host_ip = ip_map.get(str(hosts[0].get("host_id") or ""), "")
 
         existing = (await db.execute(
             select(Alert).where(Alert.event_id == eid)
@@ -84,6 +105,7 @@ async def sync_zabbix_alerts(db: AsyncSession) -> dict[str, int]:
                 event_id=eid,
                 host=data["host"],
                 host_id=data["host_id"],
+                host_ip=host_ip,
                 title=data["title"],
                 trigger_id=data["trigger_id"],
                 severity=data["severity"],
@@ -107,6 +129,8 @@ async def sync_zabbix_alerts(db: AsyncSession) -> dict[str, int]:
                 existing.host = data["host"]
             if data["host_id"]:
                 existing.host_id = data["host_id"]
+            if host_ip:
+                existing.host_ip = host_ip
             if data["occurred_at"]:
                 existing.occurred_at = data["occurred_at"]
             existing.raw_payload = p

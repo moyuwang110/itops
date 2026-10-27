@@ -41,6 +41,17 @@ class Settings(BaseSettings):
     # 外部调用
     http_timeout: float = 120.0
 
+    # 运维工具箱：DHCP 租约文件路径（逗号分隔，按顺序尝试，自动识别 ISC/dnsmasq 格式）
+    dhcp_lease_files: str = "/var/lib/dhcp/dhcpd.leases,/var/lib/dhcpd/dhcpd.leases,/var/lib/misc/dnsmasq.leases"
+
+    # DHCP 租约上传令牌：Windows DHCP 服务器推送脚本需在 X-Auth-Token 头中携带此值
+    dhcp_upload_token: str = "dhcp-lease-2026"
+    # DHCP 历史快照保留天数
+    dhcp_retention_days: int = 7
+
+    # 运行时数据目录（姓名映射、DHCP 快照等）
+    data_dir: str = "/app/data"
+
     # Cookie 安全：仅 HTTPS 部署时置 true（nginx HTTP 反代场景需 false）
     cookie_secure: bool = False
 
@@ -82,16 +93,22 @@ DEFAULT_JWT_SECRETS = {
     "dev-only-jwt-secret-please-change-0123456789abcdef",
 }
 DEFAULT_FERNET_KEYS = {"pR5JQWEyc02scbP_TNs52W89eKVdY3KPUQOptDzwlnY="}
+# .env.example 中的占位符：要求部署前必须替换
+PLACEHOLDER_SECRETS = {
+    "__REPLACE_ME_BEFORE_DEPLOY__",
+    "ChangeMe_2026!",
+    "",
+}
 
 
 def validate_secure_secrets(s: Settings) -> None:
-    """生产模式启动前强校验：内置默认口令/密钥必须全部更换。"""
+    """生产模式启动前强校验：内置默认口令/密钥与占位符必须全部更换。"""
     insecure: list[str] = []
-    if s.admin_password in DEFAULT_ADMIN_PASSWORDS:
+    if s.admin_password in DEFAULT_ADMIN_PASSWORDS or s.admin_password in PLACEHOLDER_SECRETS:
         insecure.append("ADMIN_PASSWORD")
-    if s.jwt_secret_key in DEFAULT_JWT_SECRETS:
+    if s.jwt_secret_key in DEFAULT_JWT_SECRETS or s.jwt_secret_key in PLACEHOLDER_SECRETS:
         insecure.append("JWT_SECRET_KEY")
-    if s.fernet_key in DEFAULT_FERNET_KEYS:
+    if s.fernet_key in DEFAULT_FERNET_KEYS or s.fernet_key in PLACEHOLDER_SECRETS:
         insecure.append("FERNET_KEY")
     if insecure:
         raise RuntimeError(

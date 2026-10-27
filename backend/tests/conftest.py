@@ -52,3 +52,14 @@ async def auth_headers(client: AsyncClient) -> dict[str, str]:
     )
     assert resp.status_code == 200
     return {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+
+@pytest_asyncio.fixture
+async def db_session(client):
+    """直接获取异步数据库会话的夹具（服务层单元测试用）。
+
+    依赖 client 夹具以保证表已创建；每个用例结束自动关闭会话。
+    """
+    from app.core.database import AsyncSessionLocal
+    async with AsyncSessionLocal() as session:
+        yield session

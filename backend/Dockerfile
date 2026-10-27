@@ -7,6 +7,11 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
+# 安装运维工具箱所需的系统命令（ping / arp / ip）
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends iputils-ping iproute2 net-tools \
+    && rm -rf /var/lib/apt/lists/*
+
 # 先装依赖，利用层缓存
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

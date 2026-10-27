@@ -174,11 +174,21 @@ const menus = [
   },
   { title: '监控数据', icon: 'Monitor',
     children: [
+      { title: '主机', icon: 'Monitor', path: '/monitoring/hosts' },
       { title: '主机与监控项', icon: 'Monitor', path: '/monitoring' },
       { title: '未恢复问题', icon: 'Warning', path: '/monitoring/problems' },
     ],
   },
+  { title: '虚拟机管理', icon: 'Cpu', path: '/vms' },
+  { title: 'CMDB 配置项', icon: 'Coin', path: '/cmdb' },
   { title: '日志查询', icon: 'Tickets', path: '/logs' },
+  {
+    title: '运维工具箱', icon: 'Tools',
+    children: [
+      { title: 'IPAM 地址管理', icon: 'Connection', path: '/ipam' },
+      { title: 'DHCP 信息', icon: 'Promotion', path: '/toolbox/dhcp' },
+    ],
+  },
   { title: 'AI Agent', icon: 'MagicStick', path: '/agents' },
   {
     title: '集成配置', icon: 'Setting',
@@ -186,6 +196,8 @@ const menus = [
       { title: 'Zabbix', icon: 'Connection', path: '/settings/zabbix' },
       { title: '大模型', icon: 'ChatDotRound', path: '/settings/llm' },
       { title: '日志平台', icon: 'Files', path: '/settings/logs' },
+      { title: 'VMware vCenter', icon: 'Cpu', path: '/settings/vmware' },
+      { title: 'CMDB', icon: 'Coin', path: '/settings/cmdb' },
       { title: '通知渠道', icon: 'Promotion', path: '/settings/notify' },
       { title: '分析参数', icon: 'Tools', path: '/settings/system' },
     ],
@@ -314,11 +326,16 @@ async function savePassword() {
   border-right: 1px solid var(--el-border-color-lighter);
   transition: width 0.2s;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .side-menu {
   border-right: none;
   background: transparent;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .logo {

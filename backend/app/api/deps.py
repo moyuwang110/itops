@@ -57,6 +57,9 @@ async def get_current_user(
     jti = payload.get("jti", "")
     if not username:
         raise BizError("非法用户", code="forbidden", http_status=403)
+    # 没有 jti 的旧 token 视为无效，强制重新登录（确保登出黑名单机制生效）
+    if not jti:
+        raise BizError("登录令牌无效或已过期", code="unauthorized", http_status=401)
     if await is_token_revoked(db, jti):
         raise BizError("登录已退出，请重新登录", code="unauthorized", http_status=401)
     return username

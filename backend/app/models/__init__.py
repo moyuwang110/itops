@@ -16,6 +16,7 @@ from app.models.constants import (
     CFG_ZABBIX,
 )
 from app.models.report import NotificationRecord, Report
+from app.models.ipam import IPAddress, IPChangeLog, Subnet, Vlan
 
 __all__ = [
     "Agent",
@@ -25,6 +26,10 @@ __all__ = [
     "SystemSetting",
     "Report",
     "NotificationRecord",
+    "Vlan",
+    "Subnet",
+    "IPAddress",
+    "IPChangeLog",
     "ALERT_PROBLEM",
     "ALERT_RESOLVED",
     "ANALYSIS_PENDING",

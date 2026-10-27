@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,6 +22,9 @@ logger = logging.getLogger(__name__)
 
 # Zabbix 告警同步间隔（秒）
 ALERT_SYNC_INTERVAL = 60
+# IPAM 每日自动扫描执行时刻（北京时间 02:00）
+IPAM_SCAN_HOUR = 2
+IPAM_SCAN_TZ_OFFSET = 8
 
 
 async def _alert_sync_loop() -> None:
@@ -35,6 +38,26 @@ async def _alert_sync_loop() -> None:
         except Exception:  # noqa: BLE001
             logger.exception("定时同步 Zabbix 告警异常")
         await asyncio.sleep(ALERT_SYNC_INTERVAL)
+
+
+async def _ipam_daily_scan_loop() -> None:
+    """后台循环：每天 02:00（北京时间）自动扫描所有启用网段。"""
+    from app.services import ipam_service
+
+    last_run_date = None
+    while True:
+        try:
+            bj_now = datetime.now(timezone.utc) + timedelta(hours=IPAM_SCAN_TZ_OFFSET)
+            today = bj_now.date()
+            if bj_now.hour == IPAM_SCAN_HOUR and last_run_date != today:
+                async with AsyncSessionLocal() as db:
+                    result = await ipam_service.scan_all_subnets(db)
+                last_run_date = today
+                logger.info("IPAM 每日扫描：成功 %s 个网段，失败 %s 个",
+                            result.get("scanned"), len(result.get("failed") or []))
+        except Exception:  # noqa: BLE001
+            logger.exception("IPAM 每日自动扫描异常")
+        await asyncio.sleep(300)
 
 
 @asynccontextmanager
@@ -66,14 +89,17 @@ async def lifespan(app: FastAPI):  # noqa: ANN201
         logger.exception("启动回收 processing 告警失败")
     # 启动后立即同步一次 Zabbix 告警，再进入定时循环
     sync_task = asyncio.create_task(_alert_sync_loop())
+    ipam_task = asyncio.create_task(_ipam_daily_scan_loop())
     logger.info("ITOPS 后端启动完成", extra={"db": settings.database_url.split(":", 1)[0]})
     yield
     # 关闭共享 httpx 客户端，释放连接资源
-    sync_task.cancel()
-    try:
-        await sync_task
-    except asyncio.CancelledError:
-        pass
+    for task in (sync_task, ipam_task):
+        task.cancel()
+    for task in (sync_task, ipam_task):
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
     try:
         from app.integrations.llm.client import close_shared_clients as close_llm
         from app.integrations.zabbix.client import close_shared_clients as close_zabbix

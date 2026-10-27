@@ -12,6 +12,9 @@ from app.core.exceptions import IntegrationError
 
 logger = logging.getLogger(__name__)
 
+# Zabbix 主机 Agent 可用性：0 未知 / 1 可用 / 2 不可用
+_AVAILABLE_LABEL = {"0": "未知", "1": "可用", "2": "不可用"}
+
 # 共享 httpx 客户端池：按 verify_ssl 分组复用，避免每次 RPC 重新建连/TLS 握手。
 # httpx 不支持 per-request verify，因此按配置分组维护客户端。
 _shared_clients: dict[bool, httpx.AsyncClient] = {}
@@ -151,6 +154,139 @@ class ZabbixClient:
             "ip": ip or "",
             "monitored": str(row.get("status")) == "0",
         }
+
+    async def get_hosts_ip_map(self, host_ids: list[str]) -> dict[str, str]:
+        """批量查询主机接口 IP，返回 {host_id: ip}。"""
+        if not host_ids:
+            return {}
+        rows = await self._call("host.get", {
+            "hostids": list(host_ids),
+            "output": ["hostid"],
+            "selectInterfaces": ["ip", "dns", "useip"],
+        })
+        result: dict[str, str] = {}
+        for r in rows or []:
+            hid = str(r.get("hostid") or "")
+            interfaces = r.get("interfaces") or []
+            ip = ""
+            if interfaces:
+                itf = interfaces[0]
+                ip = itf.get("ip") if itf.get("useip") == "1" else itf.get("dns")
+            result[hid] = ip or ""
+        return result
+
+    # ---------- 主机概览与资源使用率 ----------
+
+    async def list_hosts_overview(self, keyword: str = "", limit: int = 500) -> list[dict[str, Any]]:
+        """主机清单：主机名、接口 IP、主机组、Agent 可用性、监控状态。"""
+        params: dict[str, Any] = {
+            "output": ["hostid", "host", "name", "status", "available",
+                       "active_available", "error", "description"],
+            "selectInterfaces": ["ip", "dns", "useip", "type", "port"],
+            "selectHostGroups": ["groupid", "name"],
+            "sortfield": "host",
+            "limit": limit,
+        }
+        if keyword:
+            params["search"] = {"host": keyword, "name": keyword}
+            params["searchByAny"] = True
+        rows = await self._call("host.get", params)
+        out: list[dict[str, Any]] = []
+        for row in rows or []:
+            base = self._norm_host(row)
+            groups = [g.get("name") or "" for g in (row.get("hostgroups") or [])]
+            available = str(row.get("available", "0"))
+            out.append({
+                **base,
+                "status": str(row.get("status", "0")),
+                "enabled": str(row.get("status")) == "0",
+                "available": available,
+                "available_label": _AVAILABLE_LABEL.get(available, "未知"),
+                "active_available": str(row.get("active_available", "0")),
+                "error": row.get("error") or "",
+                "description": row.get("description") or "",
+                "hostgroups": [g for g in groups if g],
+            })
+        return out
+
+    async def host_usage_map(self) -> dict[str, dict[str, float | None]]:
+        """批量汇总每台主机的 CPU / 内存 / 磁盘使用率（百分数）。
+
+        依据 Zabbix 监控项 key 前缀匹配，取最新值（lastvalue）：
+        - CPU：system.cpu.util / system.cpu.utilization（idle 类做 100-value 转换）
+        - 内存：vm.memory.utilization 优先，其次 vm.memory.size[pused]
+        - 磁盘：vfs.fs.size[...,pused] 取所有文件系统最大值
+        返回 {host_id: {"cpu": x, "memory": y, "disk": z}}，取不到的项为 None。
+        """
+        usage: dict[str, dict[str, float | None]] = {}
+
+        def _bucket(host_id: str) -> dict[str, float | None]:
+            return usage.setdefault(host_id, {"cpu": None, "memory": None, "disk": None})
+
+        async def _fetch(search_key: str) -> list[dict[str, Any]]:
+            return await self._call("item.get", {
+                "output": ["itemid", "hostid", "key_", "lastvalue", "status"],
+                "search": {"key_": search_key},
+                "filter": {"status": 0},
+            }) or []
+
+        # CPU
+        for r in await _fetch("system.cpu.util"):
+            host_id = str(r.get("hostid") or "")
+            if not host_id:
+                continue
+            key = str(r.get("key_") or "")
+            # 多核汇总项无需展示；优先取 avg1 的 idle 或非 idle 项
+            if key.startswith("system.cpu.util[") and "#" in key:
+                continue
+            try:
+                val = float(r.get("lastvalue"))
+            except (TypeError, ValueError):
+                continue
+            if ",idle" in key:
+                val = 100.0 - val
+            b = _bucket(host_id)
+            if b["cpu"] is None or "avg1" in key:
+                b["cpu"] = round(max(0.0, min(100.0, val)), 1)
+
+        # 内存：utilization 优先
+        for r in await _fetch("vm.memory.utilization"):
+            host_id = str(r.get("hostid") or "")
+            try:
+                val = float(r.get("lastvalue"))
+            except (TypeError, ValueError):
+                continue
+            if host_id:
+                _bucket(host_id)["memory"] = round(max(0.0, min(100.0, val)), 1)
+        # 内存兜底：pused
+        for r in await _fetch("vm.memory.size[pused]"):
+            host_id = str(r.get("hostid") or "")
+            if not host_id or _bucket(host_id)["memory"] is not None:
+                continue
+            try:
+                val = float(r.get("lastvalue"))
+            except (TypeError, ValueError):
+                continue
+            _bucket(host_id)["memory"] = round(max(0.0, min(100.0, val)), 1)
+
+        # 磁盘：取所有文件系统 pused 最大值（兼容 vfs.fs.size 与 vfs.fs.dependent.size）
+        for r in await _fetch("vfs.fs."):
+            key = str(r.get("key_") or "")
+            if "pused" not in key or "inode" in key:
+                continue
+            host_id = str(r.get("hostid") or "")
+            try:
+                val = float(r.get("lastvalue"))
+            except (TypeError, ValueError):
+                continue
+            if not host_id:
+                continue
+            b = _bucket(host_id)
+            val = round(max(0.0, min(100.0, val)), 1)
+            if b["disk"] is None or val > b["disk"]:
+                b["disk"] = val
+
+        return usage
 
     async def list_items(self, host_id: str, keyword: str = "",
                          limit: int = 500) -> list[dict[str, Any]]:

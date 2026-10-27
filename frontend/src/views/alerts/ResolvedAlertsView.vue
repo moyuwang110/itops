@@ -4,7 +4,7 @@
 
     <el-card shadow="never">
       <div class="toolbar">
-        <el-input v-model="filters.host" placeholder="主机名关键字" clearable
+        <el-input v-model="filters.host" placeholder="主机名 / IP 关键字" clearable
                   style="width: 220px" @keyup.enter="reload()" :prefix-icon="Search" />
         <el-select v-model="filters.severities" placeholder="级别（可多选）" multiple collapse-tags
                    collapse-tags-tooltip clearable style="width: 200px" @change="reload()">
@@ -25,6 +25,11 @@
             <el-link type="primary" @click="$router.push(`/alerts/${row.event_id}`)">
               {{ row.host || '-' }}
             </el-link>
+          </template>
+        </el-table-column>
+        <el-table-column label="主机 IP" width="140" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span class="mono">{{ row.host_ip || '-' }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="title" label="问题描述" min-width="260" show-overflow-tooltip />

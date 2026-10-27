@@ -139,6 +139,85 @@
           </el-row>
         </el-tab-pane>
 
+        <!-- VMware vCenter -->
+        <el-tab-pane label="VMware vCenter" name="vmware">
+          <el-row :gutter="14">
+            <el-col :xs="24" :md="12">
+              <el-card class="provider-card" shadow="hover">
+                <template #header><b>vCenter Server <span class="mono text-muted" style="font-weight:400">vcenter</span></b></template>
+                <el-form :model="forms.vmware.vcenter" label-width="100px" size="small">
+                  <el-form-item label="服务地址">
+                    <el-input v-model="forms.vmware.vcenter.host" placeholder="vcenter.example.com 或 IP" />
+                  </el-form-item>
+                  <el-form-item label="端口">
+                    <el-input-number v-model="forms.vmware.vcenter.port" :min="1" :max="65535" />
+                  </el-form-item>
+                  <el-form-item label="用户名">
+                    <el-input v-model="forms.vmware.vcenter.username" placeholder="administrator@vsphere.local" />
+                  </el-form-item>
+                  <el-form-item label="密码">
+                    <el-input v-model="forms.vmware.vcenter.password" type="password" show-password
+                              placeholder="不修改请保持掩码" />
+                  </el-form-item>
+                  <el-form-item label="校验证书">
+                    <el-switch v-model="forms.vmware.vcenter.verify_ssl" />
+                  </el-form-item>
+                  <el-form-item label="启用">
+                    <el-switch v-model="forms.vmware.vcenter.enabled" />
+                  </el-form-item>
+                  <el-form-item>
+                    <el-button type="primary" size="small" @click="save('vmware', 'vcenter')">保存</el-button>
+                    <el-button size="small" :disabled="!ids.vmware.vcenter" @click="test('vmware', 'vcenter')">连通性测试</el-button>
+                    <el-button size="small" type="danger" plain :disabled="!ids.vmware.vcenter" @click="remove('vmware', 'vcenter')">删除</el-button>
+                  </el-form-item>
+                  <el-tag v-if="resultOf('vmware', 'vcenter')" size="small"
+                          :type="resultOf('vmware', 'vcenter').ok ? 'success' : 'danger'">
+                    {{ resultOf('vmware', 'vcenter').message }}
+                  </el-tag>
+                </el-form>
+              </el-card>
+            </el-col>
+          </el-row>
+        </el-tab-pane>
+
+        <!-- CMDB -->
+        <el-tab-pane label="CMDB" name="cmdb">
+          <el-row :gutter="14">
+            <el-col :xs="24" :md="12">
+              <el-card class="provider-card" shadow="hover">
+                <template #header><b>OneOps CMDB <span class="mono text-muted" style="font-weight:400">oneops</span></b></template>
+                <el-form :model="forms.cmdb.oneops" label-width="100px" size="small">
+                  <el-form-item label="服务地址">
+                    <el-input v-model="forms.cmdb.oneops.base_url" placeholder="http://192.168.107.150:8000" />
+                  </el-form-item>
+                  <el-form-item label="用户名">
+                    <el-input v-model="forms.cmdb.oneops.username" placeholder="登录用户名" />
+                  </el-form-item>
+                  <el-form-item label="密码">
+                    <el-input v-model="forms.cmdb.oneops.password" type="password" show-password
+                              placeholder="不修改请保持掩码" />
+                  </el-form-item>
+                  <el-form-item label="校验证书">
+                    <el-switch v-model="forms.cmdb.oneops.verify_ssl" />
+                  </el-form-item>
+                  <el-form-item label="启用">
+                    <el-switch v-model="forms.cmdb.oneops.enabled" />
+                  </el-form-item>
+                  <el-form-item>
+                    <el-button type="primary" size="small" @click="save('cmdb', 'oneops')">保存</el-button>
+                    <el-button size="small" :disabled="!ids.cmdb.oneops" @click="test('cmdb', 'oneops')">连通性测试</el-button>
+                    <el-button size="small" type="danger" plain :disabled="!ids.cmdb.oneops" @click="remove('cmdb', 'oneops')">删除</el-button>
+                  </el-form-item>
+                  <el-tag v-if="resultOf('cmdb', 'oneops')" size="small"
+                          :type="resultOf('cmdb', 'oneops').ok ? 'success' : 'danger'">
+                    {{ resultOf('cmdb', 'oneops').message }}
+                  </el-tag>
+                </el-form>
+              </el-card>
+            </el-col>
+          </el-row>
+        </el-tab-pane>
+
         <!-- 通知渠道 -->
         <el-tab-pane label="通知渠道" name="notify">
           <el-row :gutter="14">
@@ -195,6 +274,73 @@
               </el-checkbox-group>
               <div v-if="!enabledNotifyChannels.length" class="text-muted">暂无已启用通知渠道</div>
             </el-form-item>
+            <el-divider content-position="left">告警降噪</el-divider>
+            <el-form-item label="智能去重">
+              <el-switch v-model="sysForm.dedup_enabled" />
+              <span class="text-muted" style="margin-left:10px">同一主机+触发器+标题在窗口内合并</span>
+            </el-form-item>
+            <el-form-item label="去重时间窗口（分钟）">
+              <el-input-number v-model="sysForm.dedup_window_minutes" :min="1" :max="1440" />
+            </el-form-item>
+            <el-form-item label="告警抑制">
+              <el-switch v-model="sysForm.suppression_enabled" />
+              <span class="text-muted" style="margin-left:10px">维护窗口、主机宕机、风暴时抑制低级别告警</span>
+            </el-form-item>
+            <el-form-item label="关联分析">
+              <el-switch v-model="sysForm.correlation_enabled" />
+              <span class="text-muted" style="margin-left:10px">父子关联（主机宕机抑制服务告警）+ 风暴检测</span>
+            </el-form-item>
+            <el-form-item label="风暴阈值（条）">
+              <el-input-number v-model="sysForm.storm_threshold" :min="1" :max="10000" />
+              <span class="text-muted" style="margin-left:10px">窗口内同主机告警数达到该值判定为风暴</span>
+            </el-form-item>
+            <el-form-item label="风暴时间窗口（分钟）">
+              <el-input-number v-model="sysForm.storm_window_minutes" :min="1" :max="1440" />
+            </el-form-item>
+            <el-divider content-position="left">自动分析条件规则</el-divider>
+            <el-alert type="info" :closable="false" style="margin-bottom:12px"
+                      title="规则间为「或」关系，单条规则内各条件为「且」关系；条件留空表示不限制。无规则时所有告警自动分析。" />
+            <div class="rules-list">
+              <el-card v-for="(rule, idx) in sysForm.auto_analysis_rules" :key="idx"
+                       class="rule-card" shadow="never">
+                <div class="rule-head">
+                  <el-input v-model="rule.name" placeholder="规则名称（可选）" style="max-width:220px" size="small" />
+                  <el-switch v-model="rule.enabled" active-text="启用" inactive-text="停用" size="small" />
+                  <el-button link type="danger" size="small" @click="removeRule(idx)">删除</el-button>
+                </div>
+                <el-form label-width="110px" size="small" class="rule-form">
+                  <el-form-item label="告警级别">
+                    <el-select v-model="rule.severities" multiple collapse-tags collapse-tags-tooltip
+                               placeholder="不限" style="width:100%">
+                      <el-option v-for="s in severityOptions" :key="s" :label="s" :value="s" />
+                    </el-select>
+                  </el-form-item>
+                  <el-form-item label="指定主机">
+                    <el-select v-model="rule.hosts" multiple filterable allow-create collapse-tags collapse-tags-tooltip
+                               placeholder="不限，可输入主机名回车添加" style="width:100%" />
+                  </el-form-item>
+                  <el-form-item label="主机通配符">
+                    <el-input v-model="rule.host_pattern" placeholder="如 prod-*，匹配主机名" clearable />
+                  </el-form-item>
+                  <el-form-item label="生效时段">
+                    <div class="time-ranges">
+                      <div v-for="(tr, ti) in rule.time_ranges" :key="ti" class="time-range-row">
+                        <el-time-picker v-model="tr.start" format="HH:mm" value-format="HH:mm" placeholder="开始" style="width:110px" />
+                        <span>-</span>
+                        <el-time-picker v-model="tr.end" format="HH:mm" value-format="HH:mm" placeholder="结束" style="width:110px" />
+                        <el-button link type="danger" size="small" @click="rule.time_ranges.splice(ti, 1)">移除</el-button>
+                      </div>
+                      <el-button size="small" plain @click="rule.time_ranges.push({ start: '', end: '' })">+ 添加时段</el-button>
+                    </div>
+                  </el-form-item>
+                  <el-form-item label="标题关键字">
+                    <el-select v-model="rule.keywords" multiple filterable allow-create collapse-tags collapse-tags-tooltip
+                               placeholder="不限，标题需包含任一关键字" style="width:100%" />
+                  </el-form-item>
+                </el-form>
+              </el-card>
+              <el-button type="primary" plain size="small" @click="addRule" :icon="Plus">+ 添加规则</el-button>
+            </div>
             <el-form-item>
               <el-button type="primary" :loading="saving" @click="saveSystem">保存设置</el-button>
             </el-form-item>
@@ -209,12 +355,13 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus } from '@element-plus/icons-vue'
 import api from '../../utils/api'
 
 const route = useRoute()
 const router = useRouter()
 
-const TABS = ['zabbix', 'llm', 'logs', 'notify', 'system']
+const TABS = ['zabbix', 'llm', 'logs', 'vmware', 'cmdb', 'notify', 'system']
 const activeTab = ref(TABS.includes(route.params.tab) ? route.params.tab : 'zabbix')
 
 watch(() => route.params.tab, (t) => {
@@ -256,12 +403,38 @@ const forms = reactive({
     feishu: { webhook_url: '', secret: '', enabled: false },
     wecom: { webhook_url: '', secret: '', enabled: false },
   },
+  vmware: {
+    vcenter: { host: '', port: 443, username: '', password: '', verify_ssl: false, enabled: false },
+  },
+  cmdb: {
+    oneops: { base_url: '', username: '', password: '', verify_ssl: false, enabled: false },
+  },
 })
 
-const ids = reactive({ zabbix: null, llm: {}, logs: {}, notify: {} })
+const ids = reactive({ zabbix: null, llm: {}, logs: {}, notify: {}, vmware: {}, cmdb: {} })
 const testResults = reactive({})
 const enabledNotifyChannels = ref([])
-const sysForm = reactive({ auto_analysis: true, before_minutes: 30, after_minutes: 10, log_keywords: 'error,exception,超时,failed,OOM', auto_notify_channels: [] })
+const sysForm = reactive({
+  auto_analysis: true, before_minutes: 30, after_minutes: 10,
+  log_keywords: 'error,exception,超时,failed,OOM', auto_notify_channels: [],
+  dedup_enabled: true, dedup_window_minutes: 5,
+  suppression_enabled: true, correlation_enabled: true,
+  storm_threshold: 10, storm_window_minutes: 5,
+  auto_analysis_rules: [],
+})
+
+const severityOptions = ['未分类', '信息', '警告', '一般严重', '严重', '灾难']
+
+function addRule() {
+  sysForm.auto_analysis_rules.push({
+    name: '', enabled: true, severities: [], hosts: [],
+    host_pattern: '', time_ranges: [], keywords: [],
+  })
+}
+
+function removeRule(idx) {
+  sysForm.auto_analysis_rules.splice(idx, 1)
+}
 
 const loading = ref(false)
 const saving = ref(false)
@@ -278,6 +451,8 @@ const SENSITIVE = {
   llm: ['api_key'],
   logs: { graylog: ['api_token', 'password'], loki: ['password'], elasticsearch: ['api_key', 'password'] },
   notify: ['webhook_url', 'secret'],
+  vmware: ['password'],
+  cmdb: ['password'],
 }
 
 function buildSettings(type, provider) {
@@ -314,12 +489,33 @@ async function loadAll() {
       } else if (row.type === 'notify_channel' && forms.notify[row.provider]) {
         ids.notify[row.provider] = row.id
         Object.assign(forms.notify[row.provider], { ...row.settings, enabled: row.enabled })
+      } else if (row.type === 'vmware' && forms.vmware[row.provider]) {
+        ids.vmware[row.provider] = row.id
+        Object.assign(forms.vmware[row.provider], { ...row.settings, enabled: row.enabled })
+      } else if (row.type === 'cmdb' && forms.cmdb[row.provider]) {
+        ids.cmdb[row.provider] = row.id
+        Object.assign(forms.cmdb[row.provider], { ...row.settings, enabled: row.enabled })
       }
     }
     enabledNotifyChannels.value = data.filter((r) => r.type === 'notify_channel' && r.enabled)
 
     const sys = await api.get('/configs/system')
-    Object.assign(sysForm, sys.data)
+    const sysData = sys.data
+    // 归一化自动分析规则，确保旧数据缺字段时有默认值
+    if (Array.isArray(sysData.auto_analysis_rules)) {
+      sysData.auto_analysis_rules = sysData.auto_analysis_rules.map((r) => ({
+        name: r.name || '',
+        enabled: r.enabled !== false,
+        severities: Array.isArray(r.severities) ? r.severities : [],
+        hosts: Array.isArray(r.hosts) ? r.hosts : [],
+        host_pattern: r.host_pattern || '',
+        time_ranges: Array.isArray(r.time_ranges) ? r.time_ranges : [],
+        keywords: Array.isArray(r.keywords) ? r.keywords : [],
+      }))
+    } else {
+      sysData.auto_analysis_rules = []
+    }
+    Object.assign(sysForm, sysData)
   } finally {
     loading.value = false
   }
@@ -331,11 +527,17 @@ async function save(type, provider) {
     const body = type === 'zabbix'
       ? { type: 'zabbix', provider: 'zabbix', name: 'Zabbix', settings: buildSettings('zabbix'), enabled: forms.zabbix.enabled }
       : {
-          type: type === 'logs' ? 'log_platform' : type === 'notify' ? 'notify_channel' : 'llm',
+          type: type === 'logs' ? 'log_platform'
+            : type === 'notify' ? 'notify_channel'
+            : type === 'vmware' ? 'vmware'
+            : type === 'cmdb' ? 'cmdb'
+            : 'llm',
           provider,
           name: type === 'llm' ? forms.llm[provider].name
             : type === 'logs' ? logProviders.find((p) => p.key === provider).label
-            : notifyProviders.find((p) => p.key === provider).label,
+            : type === 'notify' ? notifyProviders.find((p) => p.key === provider).label
+            : type === 'vmware' ? 'vCenter Server'
+            : 'OneOps CMDB',
           settings: buildSettings(type, provider),
           enabled: forms[type][provider].enabled,
           is_default: type === 'llm' ? forms.llm[provider].is_default : false,
@@ -399,5 +601,33 @@ onMounted(loadAll)
   font-size: 12px;
   line-height: 1.5;
   margin-top: 2px;
+}
+.rules-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.rule-card {
+  border: 1px solid var(--el-border-color-lighter);
+}
+.rule-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.rule-form {
+  max-width: 560px;
+}
+.time-ranges {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.time-range-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 </style>

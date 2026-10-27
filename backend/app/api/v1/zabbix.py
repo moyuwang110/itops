@@ -24,6 +24,15 @@ async def hosts(
     return await zabbix_service.query_hosts(db, keyword, limit)
 
 
+@router.get("/hosts-overview", summary="主机概览（主机组/可用性/资源使用率）")
+async def hosts_overview(
+    keyword: str = "",
+    limit: int = Query(default=500, ge=1, le=1000),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    return await zabbix_service.query_hosts_overview(db, keyword, limit)
+
+
 @router.get("/items", summary="查询主机监控项")
 async def items(
     host_id: str = Query(..., min_length=1),

@@ -97,6 +97,21 @@ _PG_COLUMN_DDL = {
     "reports.agent_id": "INTEGER",
     "reports.agent_name": "VARCHAR(64)",
     "alerts.acknowledged": "BOOLEAN DEFAULT FALSE",
+    # 降噪字段
+    "alerts.dedup_key": "VARCHAR(64) DEFAULT ''",
+    "alerts.dedup_count": "INTEGER DEFAULT 0",
+    "alerts.suppressed": "BOOLEAN DEFAULT FALSE",
+    "alerts.suppress_reason": "VARCHAR(128) DEFAULT ''",
+    "alerts.correlation_group_id": "VARCHAR(64) DEFAULT ''",
+    "alerts.host_ip": "VARCHAR(64) DEFAULT ''",
+    # 系统设置降噪配置
+    "system_settings.dedup_enabled": "BOOLEAN DEFAULT TRUE",
+    "system_settings.dedup_window_minutes": "INTEGER DEFAULT 5",
+    "system_settings.suppression_enabled": "BOOLEAN DEFAULT TRUE",
+    "system_settings.correlation_enabled": "BOOLEAN DEFAULT TRUE",
+    "system_settings.storm_threshold": "INTEGER DEFAULT 10",
+    "system_settings.storm_window_minutes": "INTEGER DEFAULT 5",
+    "system_settings.auto_analysis_rules": "JSON DEFAULT '[]'::jsonb",
 }
 
 

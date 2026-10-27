@@ -4,7 +4,7 @@
 
     <el-card shadow="never">
       <div class="toolbar">
-        <el-input v-model="filters.host" placeholder="主机名关键字" clearable
+        <el-input v-model="filters.host" placeholder="主机名 / IP 关键字" clearable
                   style="width: 220px" @keyup.enter="reload(1)" :prefix-icon="Search" />
         <el-select v-model="filters.severities" placeholder="级别（可多选）" multiple collapse-tags
                    collapse-tags-tooltip clearable style="width: 200px" @change="reload()">
@@ -38,10 +38,25 @@
             </el-link>
           </template>
         </el-table-column>
+        <el-table-column label="主机 IP" width="140" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span class="mono">{{ row.host_ip || '-' }}</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="title" label="问题描述" min-width="260" show-overflow-tooltip />
         <el-table-column label="级别" width="92">
           <template #default="{ row }">
             <el-tag :type="severityTag(row.severity)" size="small">{{ row.severity || '未分级' }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="降噪" width="120" align="center">
+          <template #default="{ row }">
+            <el-tag v-if="row.suppressed" type="info" size="small" effect="plain"
+                    :title="row.suppress_reason">已抑制</el-tag>
+            <el-tag v-else-if="row.dedup_count" type="warning" size="small" effect="plain">
+              去重 {{ row.dedup_count }}
+            </el-tag>
+            <span v-else class="text-muted" style="font-size:12px">-</span>
           </template>
         </el-table-column>
         <el-table-column label="事件 ID" width="140" show-overflow-tooltip>

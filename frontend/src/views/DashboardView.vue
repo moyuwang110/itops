@@ -3,7 +3,7 @@
     <h2 class="page-title">总览仪表盘</h2>
 
     <el-row :gutter="14">
-      <el-col :xs="12" :sm="12" :md="6" v-for="c in statCards" :key="c.label">
+      <el-col :xs="12" :sm="8" :md="4" v-for="c in statCards" :key="c.label">
         <el-card shadow="hover" class="stat-card">
           <div class="stat-icon" :style="{ background: c.bg, color: c.color }">
             <el-icon :size="22"><component :is="c.icon" /></el-icon>
@@ -12,6 +12,33 @@
             <div class="stat-value">{{ c.value }}</div>
             <div class="stat-label">{{ c.label }}</div>
           </div>
+        </el-card>
+      </el-col>
+    </el-row>
+
+    <el-card shadow="never" style="margin-top: 14px">
+      <template #header>
+        <div class="card-header-flex">
+          <span>24 小时告警趋势</span>
+          <span class="text-muted">按小时统计</span>
+        </div>
+      </template>
+      <EChart v-if="total24h > 0" :option="trendOption" height="260px" />
+      <el-empty v-else description="近 24 小时无告警" :image-size="70" />
+    </el-card>
+
+    <el-row :gutter="14" style="margin-top: 14px">
+      <el-col :xs="24" :md="8" v-for="item in topCards" :key="item.key">
+        <el-card shadow="never" class="top-card">
+          <template #header>
+            <div class="card-header-flex">
+              <span>{{ item.title }}</span>
+              <el-tag size="small" effect="plain" :type="item.tagType">{{ item.tagText }}</el-tag>
+            </div>
+          </template>
+          <EChart v-if="item.hasData" :option="item.option" height="240px" />
+          <el-empty v-else :description="hostUsage.available === false ? hostUsage.reason : '暂无监控数据'"
+                    :image-size="60" />
         </el-card>
       </el-col>
     </el-row>
@@ -112,6 +139,16 @@ const summary = reactive({
   analysis: { success: 0, failed: 0, processing: 0, pending: 0, success_rate: null },
   latest_alerts: [],
   integrations: [],
+  alert_trend: [],
+})
+const hostUsage = reactive({
+  available: true,
+  reason: '',
+  host_total: 0,
+  availability: { available: 0, unavailable: 0, unknown: 0 },
+  cpu_top: [],
+  memory_top: [],
+  disk_top: [],
 })
 
 const total24h = computed(() => summary.total_24h)
@@ -121,6 +158,8 @@ const statCards = computed(() => [
   { label: '24 小时告警', value: summary.total_24h, icon: 'Bell', color: '#409eff', bg: 'rgba(64,158,255,.12)' },
   { label: '分析成功率', value: summary.analysis.success_rate == null ? '-' : `${summary.analysis.success_rate}%`, icon: 'CircleCheck', color: '#67c23a', bg: 'rgba(103,194,58,.12)' },
   { label: '待处理告警', value: summary.status_dist.problem || 0, icon: 'Warning', color: '#f56c6c', bg: 'rgba(245,108,108,.12)' },
+  { label: '受监控主机', value: hostUsage.available ? hostUsage.host_total : '-', icon: 'Monitor', color: '#909399', bg: 'rgba(144,147,153,.12)' },
+  { label: '代理不可用', value: hostUsage.available ? (hostUsage.availability.unavailable || 0) : '-', icon: 'CircleClose', color: '#f56c6c', bg: 'rgba(245,108,108,.12)' },
   { label: '启用集成', value: enabledCount.value, icon: 'Connection', color: '#e6a23c', bg: 'rgba(230,162,60,.12)' },
 ])
 
@@ -133,6 +172,96 @@ const groupedIntegrations = computed(() => {
     label: labels[type],
     items: summary.integrations.filter((i) => i.type === type),
   }))
+})
+
+function barOption(list, unitLabel) {
+  const items = (list || []).slice().reverse()
+  return {
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      formatter: (p) => {
+        const item = items[p[0].dataIndex] || {}
+        return `${item.host || '-'}<br/>${unitLabel}：${p[0].value}%`
+      },
+    },
+    grid: { left: 6, right: 44, top: 8, bottom: 6, containLabel: true },
+    xAxis: {
+      type: 'value',
+      max: 100,
+      axisLabel: { formatter: '{value}%', color: theme.isDark ? '#8b949e' : '#909399' },
+      splitLine: { lineStyle: { type: 'dashed', opacity: 0.4 } },
+    },
+    yAxis: {
+      type: 'category',
+      data: items.map((i) => i.host || i.name || '-'),
+      axisLabel: {
+        width: 96,
+        overflow: 'truncate',
+        color: theme.isDark ? '#c9d1d9' : '#606266',
+      },
+      axisTick: { show: false },
+    },
+    series: [{
+      type: 'bar',
+      barMaxWidth: 16,
+      data: items.map((i) => ({
+        value: i.value,
+        itemStyle: {
+          borderRadius: [0, 4, 4, 0],
+          color: i.value >= 85 ? '#f56c6c' : i.value >= 70 ? '#e6a23c' : '#409eff',
+        },
+      })),
+      label: { show: true, position: 'right', formatter: '{c}%', color: theme.isDark ? '#c9d1d9' : '#606266' },
+    }],
+  }
+}
+
+function topList(key) {
+  return (hostUsage[key] || []).map((r) => ({ host: r.host, value: r[key.replace('_top', '')] }))
+}
+
+const topCards = computed(() => {
+  const defs = [
+    { key: 'cpu_top', title: 'CPU 使用率 TOP5', field: 'cpu', tagType: 'danger' },
+    { key: 'memory_top', title: '内存使用率 TOP5', field: 'memory', tagType: 'warning' },
+    { key: 'disk_top', title: '磁盘使用率 TOP5', field: 'disk', tagType: 'info' },
+  ]
+  return defs.map((d) => {
+    const list = topList(d.key)
+    return {
+      ...d,
+      hasData: list.length > 0,
+      tagText: list.length ? `最高 ${list[0].value}%` : '无数据',
+      option: barOption(list, d.title.replace(' TOP5', '')),
+    }
+  })
+})
+
+const trendOption = computed(() => {
+  const rows = summary.alert_trend || []
+  return {
+    tooltip: { trigger: 'axis' },
+    legend: { bottom: 0, textStyle: { color: theme.isDark ? '#c9d1d9' : '#606266' } },
+    grid: { left: 8, right: 16, top: 16, bottom: 42, containLabel: true },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      data: rows.map((r) => r.hour),
+      axisLabel: { color: theme.isDark ? '#8b949e' : '#909399' },
+    },
+    yAxis: {
+      type: 'value',
+      minInterval: 1,
+      axisLabel: { color: theme.isDark ? '#8b949e' : '#909399' },
+      splitLine: { lineStyle: { type: 'dashed', opacity: 0.4 } },
+    },
+    series: [
+      { name: '全部告警', type: 'line', smooth: true, showSymbol: false, areaStyle: { opacity: 0.18 }, data: rows.map((r) => r.total), itemStyle: { color: '#409eff' } },
+      { name: '未恢复', type: 'line', smooth: true, showSymbol: false, data: rows.map((r) => r.problem), itemStyle: { color: '#f56c6c' } },
+      { name: '已恢复', type: 'line', smooth: true, showSymbol: false, data: rows.map((r) => r.resolved), itemStyle: { color: '#67c23a' } },
+    ],
+  }
 })
 
 const severityOption = computed(() => {
@@ -171,7 +300,20 @@ async function load() {
   Object.assign(summary, data)
 }
 
-onMounted(load)
+async function loadHostUsage() {
+  try {
+    const { data } = await api.get('/dashboard/host-usage')
+    Object.assign(hostUsage, data)
+  } catch (e) {
+    hostUsage.available = false
+    hostUsage.reason = e.response?.data?.message || '获取主机资源数据失败'
+  }
+}
+
+onMounted(() => {
+  load()
+  loadHostUsage()
+})
 </script>
 
 <style scoped>
@@ -203,6 +345,9 @@ onMounted(load)
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+.top-card {
+  margin-bottom: 14px;
 }
 .integration-group {
   margin-bottom: 12px;

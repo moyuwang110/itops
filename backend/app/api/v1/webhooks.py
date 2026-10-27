@@ -11,8 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.exceptions import BizError
-from app.services import alert_service
+from app.services import alert_noise_service, alert_service
 from app.services.analysis_queue import submit_analysis
+from app.services.auto_analysis_rules import should_auto_analyze
 
 router = APIRouter(prefix="/webhooks", tags=["webhook"])
 logger = logging.getLogger(__name__)
@@ -50,14 +51,32 @@ async def receive_zabbix(
         logger.warning("告警报文解析失败: %s; 原始报文: %s", exc, payload)
         raise BizError(str(exc), code="bad_payload", http_status=400) from exc
 
-    alert, created = await alert_service.ingest_alert(db, parsed, payload)
+    # 读取系统设置，执行降噪评估
+    from app.services.config_service import get_system_setting
+    setting = await get_system_setting(db)
+    noise_result = await alert_noise_service.evaluate_noise_reduction(db, parsed, setting)
 
-    # 新建的问题类告警按系统开关自动分析（恢复消息不触发）
+    # 去重：合并到已有告警，不创建新记录
+    if noise_result["action"] == "dedup":
+        existing = noise_result["dedup_alert"]
+        await db.commit()
+        await db.refresh(existing)
+        return {
+            "ok": True,
+            "event_id": existing.event_id,
+            "alert_id": existing.id,
+            "dedup": "merged",
+            "dedup_count": existing.dedup_count,
+            "auto_analysis": False,
+        }
+
+    alert, created = await alert_service.ingest_alert(db, parsed, payload, noise_result=noise_result)
+
+    # 被抑制的告警不触发自动分析和通知
     auto = False
-    if created and not parsed["is_recovery"]:
-        from app.services.config_service import get_system_setting
-        setting = await get_system_setting(db)
-        auto = setting.auto_analysis
+    auto_reason = ""
+    if created and not parsed["is_recovery"] and not alert.suppressed:
+        auto, auto_reason = should_auto_analyze(parsed, setting)
         if auto:
             submit_analysis(alert.id)
 
@@ -66,5 +85,8 @@ async def receive_zabbix(
         "event_id": alert.event_id,
         "alert_id": alert.id,
         "dedup": "created" if created else "updated",
+        "suppressed": bool(alert.suppressed),
+        "suppress_reason": alert.suppress_reason or "",
         "auto_analysis": auto,
+        "auto_analysis_reason": auto_reason,
     }

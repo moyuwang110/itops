@@ -99,6 +99,7 @@ def parse_zabbix_payload(data: dict[str, Any]) -> dict[str, Any]:
         first_host = data["hosts"][0]
         host = str(first_host.get("name") or first_host.get("host") or "")
     host_id = str(_first(data, "host_id", "hostid", default="")).strip()
+    host_ip = str(_first(data, "host_ip", "ip", "host_ipaddress", default="")).strip()
 
     title = str(_first(data, "trigger", "trigger_name", "name", "title",
                        "subject", "message", "alert_message", default="")).strip()
@@ -114,6 +115,7 @@ def parse_zabbix_payload(data: dict[str, Any]) -> dict[str, Any]:
         "event_id": event_id,
         "host": host,
         "host_id": host_id,
+        "host_ip": host_ip,
         "title": title,
         "trigger_id": trigger_id,
         "severity": severity,
@@ -166,7 +168,8 @@ async def list_alerts(db: AsyncSession, *, status: str | None = None,
         like = f"%{escaped}%"
         conditions.append(or_(Alert.host.like(like, escape="\\"),
                               Alert.title.like(like, escape="\\"),
-                              Alert.event_id.like(like, escape="\\")))
+                              Alert.event_id.like(like, escape="\\"),
+                              Alert.host_ip.like(like, escape="\\")))
 
     count_stmt = select(func.count(Alert.id))
     list_stmt = select(Alert)
@@ -211,6 +214,7 @@ def serialize_alert(alert: Alert) -> dict[str, Any]:
         "source": alert.source,
         "event_id": alert.event_id,
         "host": alert.host,
+        "host_ip": alert.host_ip or "",
         "title": alert.title,
         "severity": alert.severity,
         "status": alert.status,
@@ -221,6 +225,10 @@ def serialize_alert(alert: Alert) -> dict[str, Any]:
         "occurred_at": to_iso(alert.occurred_at),
         "recovered_at": to_iso(alert.recovered_at),
         "created_at": to_iso(alert.created_at),
+        "dedup_count": alert.dedup_count or 0,
+        "suppressed": bool(alert.suppressed),
+        "suppress_reason": alert.suppress_reason or "",
+        "correlation_group_id": alert.correlation_group_id or "",
     }
 
 
@@ -232,6 +240,8 @@ def _apply_update(existing: Alert, parsed: dict[str, Any], raw: dict[str, Any]) 
         existing.severity = parsed["severity"]
     if parsed["host"] and not existing.host:
         existing.host = parsed["host"]
+    if parsed.get("host_ip") and not existing.host_ip:
+        existing.host_ip = parsed["host_ip"]
     if parsed["is_recovery"]:
         existing.recovery_raw_payload = raw
         if existing.status == ALERT_PROBLEM:
@@ -242,11 +252,15 @@ def _apply_update(existing: Alert, parsed: dict[str, Any], raw: dict[str, Any]) 
 
 
 async def ingest_alert(db: AsyncSession, parsed: dict[str, Any],
-                       raw: dict[str, Any]) -> tuple[Alert, bool]:
+                       raw: dict[str, Any],
+                       noise_result: dict[str, Any] | None = None) -> tuple[Alert, bool]:
     """按 event_id 幂等入库。返回 (alert, created)。
 
     并发提交同一 event_id 时，第二个请求的唯一约束 commit 会失败，
     此时回滚并重查走更新分支，保证 Webhook 幂等（不返回 500）。
+
+    noise_result: 由 alert_noise_service.evaluate_noise_reduction 产出的降噪决策。
+                  若为 None 则不应用降噪。
     """
     existing = await get_alert_by_event(db, parsed["event_id"])
     if existing is not None:
@@ -255,11 +269,25 @@ async def ingest_alert(db: AsyncSession, parsed: dict[str, Any],
         await db.refresh(existing)
         return existing, False
 
+    # 应用降噪决策
+    dedup_key = ""
+    suppressed = False
+    suppress_reason = ""
+    correlation_group_id = ""
+    if noise_result is not None:
+        action = noise_result.get("action")
+        dedup_key = noise_result.get("dedup_key", "")
+        correlation_group_id = noise_result.get("correlation_group_id", "")
+        if action == "suppress":
+            suppressed = True
+            suppress_reason = noise_result.get("suppress_reason", "")
+
     alert = Alert(
         source="zabbix",
         event_id=parsed["event_id"],
         host=parsed["host"],
         host_id=parsed["host_id"],
+        host_ip=parsed.get("host_ip", ""),
         title=parsed["title"],
         trigger_id=parsed["trigger_id"],
         severity=parsed["severity"],
@@ -270,6 +298,10 @@ async def ingest_alert(db: AsyncSession, parsed: dict[str, Any],
         raw_payload={} if parsed["is_recovery"] else raw,
         recovery_raw_payload=raw if parsed["is_recovery"] else None,
         analysis_status=ANALYSIS_PENDING,
+        dedup_key=dedup_key,
+        suppressed=suppressed,
+        suppress_reason=suppress_reason,
+        correlation_group_id=correlation_group_id,
     )
     db.add(alert)
     try:
@@ -285,8 +317,8 @@ async def ingest_alert(db: AsyncSession, parsed: dict[str, Any],
         await db.refresh(existing)
         return existing, False
     await db.refresh(alert)
-    logger.info("收到新告警 event_id=%s host=%s title=%s",
-                alert.event_id, alert.host, alert.title)
+    logger.info("收到新告警 event_id=%s host=%s title=%s suppressed=%s",
+                alert.event_id, alert.host, alert.title, alert.suppressed)
     return alert, True
 
 

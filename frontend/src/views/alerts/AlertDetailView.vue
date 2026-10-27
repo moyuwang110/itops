@@ -11,6 +11,11 @@
             <el-tag :type="analysisTag(alert.analysis_status).type" size="small" effect="plain">
               {{ analysisTag(alert.analysis_status).label }}
             </el-tag>
+            <el-tag v-if="alert.suppressed" type="info" size="small" effect="plain"
+                    :title="alert.suppress_reason">已抑制</el-tag>
+            <el-tag v-else-if="alert.dedup_count" type="warning" size="small" effect="plain">
+              已去重 {{ alert.dedup_count }} 次
+            </el-tag>
           </div>
           <h2 class="alert-title">{{ alert.title || '（无标题）' }}</h2>
           <div class="alert-meta">
@@ -43,8 +48,46 @@
     </el-card>
 
     <el-row :gutter="14">
-      <!-- 左：指标 + 日志 -->
+      <!-- 左：VMware 信息 + 指标 + 日志 -->
       <el-col :xs="24" :md="15">
+        <el-card shadow="never" class="panel" v-loading="vmwareLoading">
+          <div class="panel-title">
+            <el-icon><Cpu /></el-icon> VMware 虚拟机信息
+            <el-tag v-if="vmware.matched" size="small" type="success" effect="plain" style="margin-left:6px">
+              匹配方式：{{ vmware.match_type === 'ip' ? 'IP' : '主机名' }}
+            </el-tag>
+          </div>
+          <template v-if="vmware.matched && vmware.vm">
+            <el-descriptions :column="2" size="small" border>
+              <el-descriptions-item label="虚拟机名称">{{ vmware.vm.name }}</el-descriptions-item>
+              <el-descriptions-item label="电源状态">
+                <el-tag :type="vmware.vm.power_state === 'poweredOn' ? 'success' : vmware.vm.power_state === 'poweredOff' ? 'info' : 'warning'" size="small">
+                  {{ vmware.vm.power_state }}
+                </el-tag>
+              </el-descriptions-item>
+              <el-descriptions-item label="客户机 IP"><span class="mono">{{ vmware.vm.guest_ip || '-' }}</span></el-descriptions-item>
+              <el-descriptions-item label="客户机主机名">{{ vmware.vm.guest_hostname || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="操作系统">{{ vmware.vm.guest_os || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="整体状态">
+                <el-tag :type="vmware.vm.overall_status === 'green' ? 'success' : vmware.vm.overall_status === 'red' ? 'danger' : 'warning'" size="small">
+                  {{ vmware.vm.overall_status || '-' }}
+                </el-tag>
+              </el-descriptions-item>
+              <el-descriptions-item label="CPU">{{ vmware.vm.num_cpu }} vCPU</el-descriptions-item>
+              <el-descriptions-item label="内存">{{ (vmware.vm.memory_mb / 1024).toFixed(1) }} GB</el-descriptions-item>
+              <el-descriptions-item label="网卡数">{{ vmware.vm.num_ethernet_cards }}</el-descriptions-item>
+              <el-descriptions-item label="虚拟磁盘">{{ vmware.vm.num_virtual_disks }}</el-descriptions-item>
+              <el-descriptions-item label="资源池">{{ vmware.vm.resource_pool || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="Tools 状态">{{ vmware.vm.guest_tools_status || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="备注" :span="2">{{ vmware.vm.annotation || '-' }}</el-descriptions-item>
+            </el-descriptions>
+          </template>
+          <el-empty v-else-if="vmware.reason" :description="vmware.reason" :image-size="60" />
+          <el-empty v-else description="点击「查询 VMware」获取关联虚拟机信息" :image-size="60">
+            <el-button type="primary" size="small" :icon="Search" :loading="vmwareLoading" @click="loadVmware">查询 VMware</el-button>
+          </el-empty>
+        </el-card>
+
         <el-card ref="metricCard" shadow="never" class="panel">
           <div class="panel-title">
             <el-icon><TrendCharts /></el-icon> 指标趋势（告警时刻前后窗口）
@@ -202,7 +245,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
-  ArrowLeft, Download, MagicStick, Monitor, Promotion, Tickets, TrendCharts, WarningFilled,
+  ArrowLeft, Cpu, Download, MagicStick, Monitor, Promotion, Search, Tickets, TrendCharts, WarningFilled,
 } from '@element-plus/icons-vue'
 import api from '../../utils/api'
 import EChart from '../../components/EChart.vue'
@@ -222,6 +265,8 @@ const report = ref(null)
 const notifications = ref([])
 const channelOptions = ref([])
 const metricCard = ref()
+const vmware = reactive({ matched: false, vm: null, reason: '', match_type: '' })
+const vmwareLoading = ref(false)
 
 const visibleSeries = ref([])
 const activeEvidence = ref(-1)
@@ -312,6 +357,21 @@ async function loadDetail() {
 async function loadChannels() {
   const { data } = await api.get('/configs', { params: { type: 'notify_channel' } })
   channelOptions.value = data.filter((c) => c.enabled)
+}
+
+async function loadVmware() {
+  vmwareLoading.value = true
+  vmware.reason = ''
+  try {
+    const { data } = await api.get(`/alerts/${route.params.id}/vmware`)
+    Object.assign(vmware, data)
+  } catch (e) {
+    vmware.matched = false
+    vmware.vm = null
+    vmware.reason = e.response?.data?.message || '查询 VMware 信息失败'
+  } finally {
+    vmwareLoading.value = false
+  }
 }
 
 async function runAnalyze() {
@@ -420,6 +480,7 @@ function locate(ev) {
 onMounted(async () => {
   await Promise.all([loadDetail(), loadChannels(), agentStore.load().catch(() => {})])
   if (alert.analysis_status === 'processing') startPolling()
+  await loadVmware()
 })
 onBeforeUnmount(stopPolling)
 </script>

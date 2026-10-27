@@ -9,15 +9,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.core.database import get_db
+from app.core.exceptions import BizError
 from app.core.timeutil import to_iso, utcnow
 from app.models.alert import Alert
 from app.models.constants import (
+    ALERT_PROBLEM,
+    ALERT_RESOLVED,
     ANALYSIS_FAILED,
     ANALYSIS_PENDING,
     ANALYSIS_PROCESSING,
     ANALYSIS_SUCCESS,
 )
-from app.services import alert_service
+from app.services import alert_service, zabbix_service
 from app.services.config_service import list_configs
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"],
@@ -38,6 +41,32 @@ async def summary(db: AsyncSession = Depends(get_db)) -> dict:
             severity_dist.get(alert.severity or "未分级", 0) + 1
         )
         status_dist[alert.status] = status_dist.get(alert.status, 0) + 1
+
+    # 按小时聚合最近 24 小时告警趋势（以当前整点为终点）
+    now = utcnow()
+    end_hour = now.replace(minute=0, second=0, microsecond=0)
+    buckets: list[dict] = []
+    for i in range(23, -1, -1):
+        hour_start = end_hour - timedelta(hours=i)
+        buckets.append({
+            "hour": hour_start.strftime("%H:00"),
+            "total": 0,
+            "problem": 0,
+            "resolved": 0,
+        })
+    index_base = end_hour - timedelta(hours=23)
+    for alert in alerts_24h:
+        if alert.occurred_at is None:
+            continue
+        offset = int((alert.occurred_at - index_base).total_seconds() // 3600)
+        if offset < 0 or offset >= len(buckets):
+            continue
+        b = buckets[offset]
+        b["total"] += 1
+        if alert.status == ALERT_PROBLEM:
+            b["problem"] += 1
+        elif alert.status == ALERT_RESOLVED:
+            b["resolved"] += 1
 
     analyzed = [a for a in alerts_24h
                 if a.analysis_status in (ANALYSIS_SUCCESS, ANALYSIS_FAILED)]
@@ -78,4 +107,14 @@ async def summary(db: AsyncSession = Depends(get_db)) -> dict:
         },
         "latest_alerts": latest["items"],
         "integrations": integrations,
+        "alert_trend": buckets,
     }
+
+
+@router.get("/host-usage", summary="主机资源 TOP5 与可用性统计（Zabbix）")
+async def host_usage(top: int = 5, db: AsyncSession = Depends(get_db)) -> dict:
+    try:
+        return {"available": True, **(await zabbix_service.query_usage_top(db, top=top))}
+    except BizError as exc:
+        # Zabbix 未配置/不可用时不阻塞仪表盘，由前端展示提示
+        return {"available": False, "reason": exc.message}

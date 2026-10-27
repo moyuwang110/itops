@@ -55,6 +55,13 @@ async def get_system_setting(db: AsyncSession = Depends(get_db)) -> dict:
         "after_minutes": row.after_minutes,
         "log_keywords": row.log_keywords,
         "auto_notify_channels": row.auto_notify_channels or [],
+        "dedup_enabled": row.dedup_enabled,
+        "dedup_window_minutes": row.dedup_window_minutes,
+        "suppression_enabled": row.suppression_enabled,
+        "correlation_enabled": row.correlation_enabled,
+        "storm_threshold": row.storm_threshold,
+        "storm_window_minutes": row.storm_window_minutes,
+        "auto_analysis_rules": row.auto_analysis_rules or [],
     }
 
 
@@ -69,4 +76,11 @@ async def update_system_setting(
         "after_minutes": row.after_minutes,
         "log_keywords": row.log_keywords,
         "auto_notify_channels": row.auto_notify_channels or [],
+        "dedup_enabled": row.dedup_enabled,
+        "dedup_window_minutes": row.dedup_window_minutes,
+        "suppression_enabled": row.suppression_enabled,
+        "correlation_enabled": row.correlation_enabled,
+        "storm_threshold": row.storm_threshold,
+        "storm_window_minutes": row.storm_window_minutes,
+        "auto_analysis_rules": row.auto_analysis_rules or [],
     }

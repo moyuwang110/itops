@@ -38,3 +38,15 @@ for _name in ("feishu", "wecom"):
     register_client_factory(
         _name, lambda conf, n=_name: build_channel(n, conf)
     )
+
+# ---- VMware vCenter ----
+from app.integrations.vmware import build_vcenter_client, vcenter_tester
+
+register_tester("vcenter", vcenter_tester)
+register_client_factory("vcenter", lambda conf: build_vcenter_client(conf))
+
+# ---- OneOps CMDB ----
+from app.integrations.cmdb import build_cmdb_client, cmdb_tester
+
+register_tester("oneops", cmdb_tester)
+register_client_factory("oneops", lambda conf: build_cmdb_client(conf))

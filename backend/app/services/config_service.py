@@ -199,10 +199,17 @@ async def get_system_setting(db: AsyncSession) -> SystemSetting:
 async def update_system_setting(db: AsyncSession, payload) -> SystemSetting:
     row = await get_system_setting(db)
     for field in ("auto_analysis", "before_minutes", "after_minutes",
-                  "log_keywords", "auto_notify_channels"):
+                  "log_keywords", "auto_notify_channels",
+                  "dedup_enabled", "dedup_window_minutes",
+                  "suppression_enabled", "correlation_enabled",
+                  "storm_threshold", "storm_window_minutes"):
         value = getattr(payload, field)
         if value is not None:
             setattr(row, field, value)
+    # 自动分析规则：Pydantic 模型列表转 dict 列表
+    rules = getattr(payload, "auto_analysis_rules", None)
+    if rules is not None:
+        row.auto_analysis_rules = [r.model_dump() if hasattr(r, "model_dump") else dict(r) for r in rules]
     await db.commit()
     await db.refresh(row)
     return row

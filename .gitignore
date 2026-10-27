@@ -44,4 +44,4 @@ docker-data/
 Thumbs.db
 
 # ========== 内部规格（可选，按需保留） ==========
-# .trae/
+.trae/

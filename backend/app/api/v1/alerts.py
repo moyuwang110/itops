@@ -15,14 +15,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.core.exceptions import BizError
+from app.integrations import CLIENT_FACTORIES
+from app.integrations.vmware.errors import VCenterError
 from app.models.constants import ANALYSIS_PROCESSING
 from app.services import (
+    alert_noise_service,
     alert_service,
     analysis_service,
     notify_service,
     report_service,
     zabbix_service,
 )
+from app.services import config_service
 from app.services.analysis_queue import submit_analysis
 
 router = APIRouter(prefix="/alerts", tags=["alerts"],
@@ -43,6 +47,7 @@ def _problem_to_row(p: dict[str, Any]) -> dict[str, Any]:
         "source": "zabbix",
         "host": (p.get("hosts") or [{}])[0].get("host") or "",
         "host_id": (p.get("hosts") or [{}])[0].get("host_id") or "",
+        "host_ip": "",
         "title": p.get("name") or "",
         "severity": _SEVERITY_NUM_TO_LABEL.get(int(sev), "-") if sev.isdigit() else (sev or "-"),
         "status": "problem",
@@ -71,6 +76,49 @@ async def list_alerts(
         sort_by=sort, page=page, page_size=page_size,
     )
     return result
+
+
+@router.get("/noise-stats", summary="告警降噪统计")
+async def noise_stats(db: AsyncSession = Depends(get_db)) -> dict:
+    """返回降噪引擎的实时统计 + 数据库内降噪指标汇总。"""
+    from sqlalchemy import func, select
+    from app.models.alert import Alert
+
+    stats = alert_noise_service.get_noise_stats()
+
+    # 数据库内汇总：被抑制总数、被去重告警数、累计去重次数
+    suppressed_count = (await db.execute(
+        select(func.count(Alert.id)).where(Alert.suppressed.is_(True))
+    )).scalar_one() or 0
+    dedup_rows = (await db.execute(
+        select(func.count(Alert.id)).where(Alert.dedup_count > 0)
+    )).scalar_one() or 0
+    dedup_total = (await db.execute(
+        select(func.coalesce(func.sum(Alert.dedup_count), 0))
+    )).scalar_one() or 0
+
+    total_in_window = stats["total_received"] or 1
+    noise_rate = round(
+        (stats["deduped"] + stats["suppressed"]) / total_in_window * 100, 1
+    ) if total_in_window else 0.0
+
+    return {
+        # 进程级内存统计（自启动以来）
+        "in_memory": {
+            "total_received": stats["total_received"],
+            "deduped": stats["deduped"],
+            "suppressed": stats["suppressed"],
+            "correlated": stats["correlated"],
+            "passed": stats["passed"],
+            "noise_rate": noise_rate,
+        },
+        # 数据库持久化统计（全量）
+        "persisted": {
+            "suppressed_count": suppressed_count,
+            "dedup_alert_count": dedup_rows,
+            "dedup_total": dedup_total,
+        },
+    }
 
 
 @router.get("/{event_id}", summary="告警详情（含报告与通知记录）")
@@ -113,6 +161,7 @@ def _local_to_detail(local: Any, report: Any, notifications: list) -> dict:
         "source": local.source,
         "host": local.host,
         "host_id": local.host_id,
+        "host_ip": local.host_ip or "",
         "title": local.title,
         "severity": local.severity,
         "status": local.status,
@@ -191,3 +240,81 @@ async def acknowledge_batch(payload: BatchAcknowledgeIn, db: AsyncSession = Depe
         raise BizError("event_ids 不能为空", code="bad_request", http_status=400)
     result = await alert_service.acknowledge_alerts_batch(db, payload.event_ids)
     return {"ok": True, "acknowledged": result["acknowledged"], "not_found": result["not_found"]}
+
+
+# ---------- VMware 联动分析 ----------
+
+
+async def _get_vcenter_client(db: AsyncSession):
+    """获取已启用的 vCenter 客户端（未配置则抛出 BizError）。"""
+    rows = await config_service.list_configs(db, "vmware")
+    vcenter_cfg = next((r for r in rows if r.provider == "vcenter" and r.enabled), None)
+    if vcenter_cfg is None:
+        raise BizError("未配置或未启用 VMware vCenter Server，请先在集成配置中添加。",
+                       code="not_configured", http_status=400)
+    factory = CLIENT_FACTORIES.get("vcenter")
+    if factory is None:
+        raise BizError("vCenter 适配器未就绪", code="adapter_missing", http_status=500)
+    plain = config_service.decrypt_settings(vcenter_cfg)
+    client = factory(plain)
+    await client.connect()
+    return client
+
+
+@router.get("/{event_id}/vmware", summary="告警关联的 VMware 虚拟机信息")
+async def alert_vmware(event_id: str, db: AsyncSession = Depends(get_db)) -> dict:
+    """按告警主机名或 IP 匹配 VMware 虚拟机，返回虚拟机详情用于联动分析。"""
+    local = await alert_service.find_alert(db, event_id)
+    if local is None:
+        raise BizError("告警不存在", code="not_found", http_status=404)
+
+    host = (local.host or "").strip()
+    host_ip = (local.host_ip or "").strip()
+    if not host and not host_ip:
+        return {"matched": False, "reason": "告警缺少主机名与 IP，无法匹配 VMware", "vm": None}
+
+    client = await _get_vcenter_client(db)
+    try:
+        try:
+            vms = await client.list_vms()
+        except VCenterError as exc:
+            raise BizError(str(exc), code=exc.code, http_status=exc.http_status)
+        except Exception as exc:  # noqa: BLE001
+            raise BizError(f"获取虚拟机清单失败：{exc}", code="vmware_error", http_status=502)
+    finally:
+        await client.disconnect()
+
+    # 匹配规则：优先 IP 精确匹配，其次主机名（忽略大小写、去域名后缀）
+    matched = None
+    match_type = ""
+    host_lower = host.lower()
+    host_short = host_lower.split(".")[0] if "." in host_lower else host_lower
+    for vm in vms:
+        vm_ip = (vm.get("guest_ip") or "").strip()
+        vm_hostname = (vm.get("guest_hostname") or "").strip().lower()
+        vm_name = (vm.get("name") or "").strip().lower()
+        if host_ip and vm_ip == host_ip:
+            matched = vm
+            match_type = "ip"
+            break
+        if host and (vm_hostname == host_lower or vm_hostname.split(".")[0] == host_short
+                     or vm_name == host_lower or vm_name == host_short):
+            matched = vm
+            match_type = "hostname"
+            break
+
+    if matched is None:
+        return {
+            "matched": False,
+            "reason": f"未在 VMware 中找到主机 {host or host_ip} 对应的虚拟机",
+            "vm": None,
+            "match_type": "",
+            "search_keys": {"host": host, "host_ip": host_ip},
+        }
+
+    return {
+        "matched": True,
+        "match_type": match_type,
+        "search_keys": {"host": host, "host_ip": host_ip},
+        "vm": matched,
+    }

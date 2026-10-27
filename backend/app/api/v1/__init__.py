@@ -5,11 +5,15 @@ from app.api.v1 import (
     agents,
     alerts,
     auth,
+    cmdb,
     configs,
     dashboard,
     health,
+    ipam,
     logs,
+    network_tools,
     reports,
+    vmware,
     webhooks,
     zabbix,
 )
@@ -25,3 +29,8 @@ api_router.include_router(reports.router)
 api_router.include_router(logs.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(agents.router)
+api_router.include_router(vmware.router)
+api_router.include_router(cmdb.router)
+api_router.include_router(ipam.router)
+api_router.include_router(network_tools.router)
+api_router.include_router(network_tools.public_router)

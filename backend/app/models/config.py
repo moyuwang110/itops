@@ -51,3 +51,20 @@ class SystemSetting(Base):
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime, server_default=func.current_timestamp(), nullable=True
     )
+
+    # ---------- 告警降噪配置 ----------
+    # 智能去重：同一 host+trigger+title 在窗口内合并，只保留第一条，计数累加
+    dedup_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    dedup_window_minutes: Mapped[int] = mapped_column(Integer, default=5)
+    # 抑制：维护窗口、高级别告警覆盖低级别
+    suppression_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    # 关联分析：父子关联（主机宕机抑制服务告警）、风暴检测
+    correlation_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    storm_threshold: Mapped[int] = mapped_column(Integer, default=10)
+    storm_window_minutes: Mapped[int] = mapped_column(Integer, default=5)
+
+    # ---------- 自动分析条件规则 ----------
+    # 规则列表，JSON 结构：[{name, enabled, severities[], hosts[], host_pattern, time_ranges[], keywords[]}]
+    # 规则间为 OR 关系，单条规则内各条件为 AND 关系（空条件视为不限制）。
+    # auto_analysis=True 且 rules 为空时保持兼容：所有告警自动分析。
+    auto_analysis_rules: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
